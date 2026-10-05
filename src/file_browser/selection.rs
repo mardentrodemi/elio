@@ -148,11 +148,43 @@ impl super::FileBrowserState {
         blocked
     }
 
+    pub(crate) fn replace_selection_with_range(&mut self, start: usize, end: usize) -> bool {
+        self.selected_paths.clear();
+        self.add_selection_range(start, end)
+    }
+
+    pub(crate) fn add_selection_range(&mut self, start: usize, end: usize) -> bool {
+        if self.entries.is_empty() {
+            return false;
+        }
+        let last = self.entries.len() - 1;
+        let start = start.min(last);
+        let end = end.min(last);
+        let (start, end) = if start <= end {
+            (start, end)
+        } else {
+            (end, start)
+        };
+        let mut blocked = false;
+        for path in self.entries[start..=end]
+            .iter()
+            .map(|entry| entry.path.clone())
+        {
+            if self.selected_paths.has_nesting_conflict(&path) {
+                blocked = true;
+                continue;
+            }
+            self.selected_paths.insert(path);
+        }
+        blocked
+    }
+
     pub(crate) fn clear_selection(&mut self) -> bool {
         if self.selected_paths.is_empty() {
             return false;
         }
         self.selected_paths.clear();
+        self.space_range_anchor = None;
         true
     }
 }

@@ -1,6 +1,8 @@
 use super::App;
 use crate::background_jobs::job_requests as jobs;
-use crate::filesystem::{Entry, format_item_count};
+use crate::filesystem::Entry;
+#[cfg(test)]
+use crate::filesystem::format_item_count;
 use std::{
     path::{Path, PathBuf},
     time::{Instant, SystemTime},
@@ -10,11 +12,13 @@ pub(crate) const DIRECTORY_ITEM_COUNT_IDLE_DELAY: std::time::Duration =
     std::time::Duration::from_millis(120);
 
 impl App {
+    #[cfg(test)]
     pub(crate) fn directory_item_count_label(&self, entry: &Entry) -> Option<String> {
         self.directory_item_count_value(entry)
             .map(format_item_count)
     }
 
+    #[cfg(test)]
     pub(crate) fn directory_item_count_value(&self, entry: &Entry) -> Option<usize> {
         self.file_browser
             .directory_item_count(entry, self.effective_show_hidden())

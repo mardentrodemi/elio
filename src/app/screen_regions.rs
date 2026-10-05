@@ -43,6 +43,8 @@ pub struct ScreenRegions {
     pub help_scroll_max: usize,
     pub help_rows_visible: usize,
     pub entries_panel: Option<Rect>,
+    pub left_entries_panel: Option<Rect>,
+    pub right_entries_panel: Option<Rect>,
     pub preview_panel: Option<Rect>,
     pub preview_body_area: Option<Rect>,
     pub preview_media_area: Option<Rect>,
@@ -65,10 +67,19 @@ pub struct PathHit {
     pub path: PathBuf,
 }
 
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub enum EntryPane {
+    #[default]
+    Active,
+    Left,
+    Right,
+}
+
 #[derive(Clone, Debug)]
 pub struct EntryHit {
     pub rect: Rect,
     pub index: usize,
+    pub pane: EntryPane,
 }
 
 #[derive(Clone, Debug)]

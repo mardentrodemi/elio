@@ -13,7 +13,11 @@ impl App {
             Event::Key(key) => self.handle_key(key),
             Event::Mouse(mouse) => self.handle_mouse(mouse),
             Event::Paste(text) => self.handle_paste(&text),
-            Event::Resize(_, _) | Event::FocusGained | Event::FocusLost => Ok(()),
+            Event::Resize(_, _) | Event::FocusGained => Ok(()),
+            Event::FocusLost => {
+                self.input.held_modifiers = HeldModifierKeys::default();
+                Ok(())
+            }
         };
 
         if let Err(error) = result {
@@ -250,6 +254,11 @@ impl App {
     }
 
     fn handle_key(&mut self, key: KeyEvent) -> Result<()> {
+        // Modifier keys are tracked through release so a later mouse event can see
+        // that Shift or Ctrl is held. Terminals often keep Shift+click for themselves.
+        self.input
+            .held_modifiers
+            .apply(key.code, key.kind != KeyEventKind::Release);
         // The kitty keyboard protocol (enabled when the terminal supports it) emits
         // Press, Repeat, and Release events. Ignore Release so each keystroke is only
         // handled once. Repeat is kept so held navigation keys continue to scroll.
@@ -422,6 +431,20 @@ impl App {
             return Ok(());
         }
 
+        if key_switches_file_pane_focus(key, configured_action) {
+            if key.kind == KeyEventKind::Press {
+                self.focus_other_file_pane();
+            }
+            return Ok(());
+        }
+
+        if configured_action == Some(crate::config::Action::SecondaryBrowser) {
+            if key.kind == KeyEventKind::Press {
+                self.toggle_secondary_browser();
+            }
+            return Ok(());
+        }
+
         if should_use_grid_zoom_for_symlink_key(self, key, configured_action) {
             self.adjust_zoom(-1);
             return Ok(());
@@ -578,6 +601,8 @@ impl App {
                     let _ = self.scroll_preview_lines(1);
                 }
             }
+            Action::SecondaryBrowser => self.toggle_secondary_browser(),
+            Action::FocusOtherFilePane => self.focus_other_file_pane(),
         }
         Ok(())
     }
@@ -654,6 +679,19 @@ enum FullscreenPreviewActionPolicy {
     DispatchThenExit,
     DispatchAndStayInFullscreen,
     Block,
+}
+
+fn key_switches_file_pane_focus(key: KeyEvent, action: Option<crate::config::Action>) -> bool {
+    if action == Some(crate::config::Action::FocusOtherFilePane) {
+        return true;
+    }
+    // Some terminals report Shift+\ as the physical backslash plus Shift,
+    // which the binding table treats as the plain `\` toggle.
+    key.modifiers.contains(KeyModifiers::SHIFT)
+        && !key
+            .modifiers
+            .intersects(KeyModifiers::CONTROL | KeyModifiers::ALT)
+        && matches!(key.code, KeyCode::Char('\\') | KeyCode::Char('|'))
 }
 
 fn fullscreen_preview_action_policy(

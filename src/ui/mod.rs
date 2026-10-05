@@ -47,6 +47,9 @@ pub fn render(frame: &mut Frame<'_>, app: &App, state: &mut ScreenRegions) {
     state.search_panel = None;
     state.duplicate_panel = None;
     state.help_panel = None;
+    state.entries_panel = None;
+    state.left_entries_panel = None;
+    state.right_entries_panel = None;
     state.preview_panel = None;
     state.preview_body_area = None;
     state.preview_media_area = None;

@@ -25,6 +25,12 @@ pub(super) fn temp_path(label: &str) -> PathBuf {
 
 pub(super) fn cleanup_app_temp_root(mut app: App, root: PathBuf) {
     app.file_browser.directory_runtime.watch = None;
+    if let Some(parked) = app.parked_primary.as_mut() {
+        parked.directory_runtime.watch = None;
+    }
+    if let Some(saved) = app.remembered_secondary.as_mut() {
+        saved.directory_runtime.watch = None;
+    }
     drop(app);
     remove_temp_root(root);
 }

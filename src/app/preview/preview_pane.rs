@@ -13,6 +13,7 @@ impl App {
     }
 
     pub(crate) fn toggle_fullscreen_preview(&mut self) {
+        self.hide_secondary_browser();
         if preview_pane_disabled_by_layout(config::layout()) {
             self.preview.visible = false;
             self.preview.fullscreen = false;
@@ -59,6 +60,7 @@ impl App {
     }
 
     pub(crate) fn toggle_preview_pane(&mut self) {
+        self.hide_secondary_browser();
         if preview_pane_disabled_by_layout(config::layout()) {
             self.preview.visible = false;
             self.preview.fullscreen = false;

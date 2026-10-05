@@ -75,6 +75,8 @@ impl Default for KeyBindings {
                 KeySpec::char('J'),
                 KeySpec::shift_named(NamedKey::Down),
             ]),
+            secondary_browser: KeyList::one('\\'),
+            focus_other_file_pane: KeyList::one('|'),
         }
     }
 }

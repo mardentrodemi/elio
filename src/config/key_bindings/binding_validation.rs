@@ -345,6 +345,18 @@ pub(super) fn resolve_key_overrides(
             override_value: overrides.scroll_preview_down,
             default: defaults.scroll_preview_down.clone(),
         },
+        RawBinding {
+            name: "secondary_browser",
+            action: Action::SecondaryBrowser,
+            override_value: overrides.secondary_browser,
+            default: defaults.secondary_browser.clone(),
+        },
+        RawBinding {
+            name: "focus_other_file_pane",
+            action: Action::FocusOtherFilePane,
+            override_value: overrides.focus_other_file_pane,
+            default: defaults.focus_other_file_pane.clone(),
+        },
     ];
 
     // Step 1: parse each override independently, falling back to default on
@@ -451,6 +463,8 @@ pub(super) fn resolve_key_overrides(
         scroll_preview_right: resolved(47),
         scroll_preview_up: resolved(48),
         scroll_preview_down: resolved(49),
+        secondary_browser: resolved(50),
+        focus_other_file_pane: resolved(51),
     }
 }
 

@@ -47,6 +47,7 @@ impl App {
     }
 
     pub fn process_auto_reload(&mut self) -> Result<bool> {
+        let inactive_reloaded = self.service_inactive_directory_watch();
         while let Ok(event) = self.file_browser.directory_runtime.watch_rx.try_recv() {
             match event {
                 crate::filesystem::DirectoryWatchEvent::Changed(paths)
@@ -63,18 +64,18 @@ impl App {
 
         if let Some(deadline) = self.file_browser.directory_runtime.pending_reload_at {
             if Instant::now() < deadline {
-                return Ok(false);
+                return Ok(inactive_reloaded);
             }
             self.file_browser.directory_runtime.pending_reload_at = None;
             return self.reload_if_directory_changed();
         }
 
         if !self.file_browser.directory_runtime.use_polling_reload {
-            return Ok(false);
+            return Ok(inactive_reloaded);
         }
 
         if self.preview.state.deferred_refresh_at.is_some() || self.browser_wheel_burst_active() {
-            return Ok(false);
+            return Ok(inactive_reloaded);
         }
 
         if self
@@ -83,7 +84,7 @@ impl App {
             .pending_fingerprint_scan
             .is_some()
         {
-            return Ok(false);
+            return Ok(inactive_reloaded);
         }
 
         if self
@@ -93,7 +94,7 @@ impl App {
             .elapsed()
             < self.polling_reload_interval()
         {
-            return Ok(false);
+            return Ok(inactive_reloaded);
         }
         self.file_browser.directory_runtime.last_auto_reload_at = Instant::now();
         self.queue_directory_fingerprint_scan()
@@ -122,6 +123,7 @@ impl App {
             bail!("Directory worker unavailable");
         }
         self.file_browser.directory_runtime.pending_load = Some(load);
+        self.reload_inactive_file_pane();
         Ok(())
     }
 
@@ -450,11 +452,50 @@ impl App {
     }
 
     fn polling_reload_interval(&self) -> Duration {
-        match self.file_browser.entries.len() {
-            0..=255 => AUTO_RELOAD_INTERVAL_SMALL,
-            256..=2047 => AUTO_RELOAD_INTERVAL_MEDIUM,
-            _ => AUTO_RELOAD_INTERVAL_LARGE,
+        polling_interval_for_entry_count(self.file_browser.entries.len())
+    }
+
+    fn service_inactive_directory_watch(&mut self) -> bool {
+        if !self.inactive_directory_watch_due() {
+            return false;
         }
+        self.reload_inactive_file_pane();
+        true
+    }
+
+    fn inactive_directory_watch_due(&mut self) -> bool {
+        let Some(browser) = self.parked_primary.as_mut() else {
+            return false;
+        };
+        let show_hidden = browser.show_hidden || browser.in_trash;
+        let mut changed = false;
+        while let Ok(event) = browser.directory_runtime.watch_rx.try_recv() {
+            match event {
+                crate::filesystem::DirectoryWatchEvent::Changed(paths)
+                    if !crate::filesystem::event_affects_visible_entries(&paths, show_hidden) => {}
+                _ => changed = true,
+            }
+        }
+        if changed {
+            browser.directory_runtime.pending_reload_at =
+                Some(Instant::now() + crate::filesystem::directory_watch_debounce());
+        }
+        if let Some(deadline) = browser.directory_runtime.pending_reload_at {
+            if Instant::now() < deadline {
+                return false;
+            }
+            browser.directory_runtime.pending_reload_at = None;
+            return true;
+        }
+        if !browser.directory_runtime.use_polling_reload {
+            return false;
+        }
+        let interval = polling_interval_for_entry_count(browser.entries.len());
+        if browser.directory_runtime.last_auto_reload_at.elapsed() < interval {
+            return false;
+        }
+        browser.directory_runtime.last_auto_reload_at = Instant::now();
+        true
     }
 
     fn refresh_search_after_directory_reload(&mut self) {
@@ -465,5 +506,13 @@ impl App {
         search.restart_loading();
         let scope = search.scope;
         self.prewarm_search_index(scope);
+    }
+}
+
+fn polling_interval_for_entry_count(entries: usize) -> Duration {
+    match entries {
+        0..=255 => AUTO_RELOAD_INTERVAL_SMALL,
+        256..=2047 => AUTO_RELOAD_INTERVAL_MEDIUM,
+        _ => AUTO_RELOAD_INTERVAL_LARGE,
     }
 }

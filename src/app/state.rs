@@ -6,7 +6,7 @@ use std::{
 
 use anyhow::{Context, Result};
 
-use super::screen_regions::ScreenRegions;
+use super::screen_regions::{EntryPane, ScreenRegions};
 use crate::background_jobs::JobScheduler;
 use crate::chooser::ChooserState;
 use crate::duplicate_finder::DuplicateFinderState;
@@ -25,6 +25,42 @@ use crate::preview::PreviewRuntime;
 pub(crate) struct ClickState {
     pub(crate) path: PathBuf,
     pub(crate) at: Instant,
+}
+
+#[derive(Clone, Copy, Debug, Default)]
+pub(crate) struct HeldModifierKeys {
+    left_shift: bool,
+    right_shift: bool,
+    left_control: bool,
+    right_control: bool,
+}
+
+impl HeldModifierKeys {
+    pub(crate) fn shift(&self) -> bool {
+        self.left_shift || self.right_shift
+    }
+
+    pub(crate) fn control(&self) -> bool {
+        self.left_control || self.right_control
+    }
+
+    pub(crate) fn apply(&mut self, code: crossterm::event::KeyCode, pressed: bool) {
+        use crossterm::event::{KeyCode, ModifierKeyCode};
+        match code {
+            KeyCode::Modifier(ModifierKeyCode::LeftShift) => self.left_shift = pressed,
+            KeyCode::Modifier(ModifierKeyCode::RightShift) => self.right_shift = pressed,
+            KeyCode::Modifier(ModifierKeyCode::LeftControl) => self.left_control = pressed,
+            KeyCode::Modifier(ModifierKeyCode::RightControl) => self.right_control = pressed,
+            _ => {}
+        }
+    }
+}
+
+#[derive(Clone, Debug)]
+pub(crate) struct CrossPaneDrag {
+    pub(crate) paths: Vec<PathBuf>,
+    pub(crate) source: EntryPane,
+    pub(crate) armed: bool,
 }
 
 #[derive(Clone, Debug)]
@@ -98,6 +134,8 @@ pub(crate) struct OverlayState {
 pub(crate) struct InputRuntime {
     pub(crate) screen_regions: ScreenRegions,
     pub(crate) last_click: Option<ClickState>,
+    pub(crate) cross_pane_drag: Option<CrossPaneDrag>,
+    pub(crate) held_modifiers: HeldModifierKeys,
     pub(crate) wheel_scroll: ScrollState,
     pub(crate) wheel_profile: WheelProfile,
     pub(crate) last_wheel_target: Option<WheelTarget>,
@@ -152,6 +190,16 @@ pub struct App {
     /// Set by features that need direct terminal control. The terminal runtime
     /// drains this, suspends the TUI, runs the task, then restores the TUI.
     pub(crate) pending_terminal_task: Option<PendingTerminalTask>,
+    /// The file pane that is not receiving keyboard input.
+    ///
+    /// `file_browser` is always the focused pane. `secondary_focus_right` says
+    /// whether that focused pane is drawn on the right.
+    pub(crate) parked_primary: Option<FileBrowserState>,
+    /// True when the right-hand file pane is focused in the two-pane view.
+    pub(crate) secondary_focus_right: bool,
+    /// Right-hand file pane kept across hide/show until the process exits.
+    /// The first open forks the left pane; later opens restore this snapshot.
+    pub(crate) remembered_secondary: Option<FileBrowserState>,
 }
 
 impl App {
@@ -187,6 +235,8 @@ impl App {
             input: InputRuntime {
                 screen_regions: ScreenRegions::default(),
                 last_click: None,
+                cross_pane_drag: None,
+                held_modifiers: HeldModifierKeys::default(),
                 wheel_scroll: ScrollState {
                     horizontal: ScrollLane::new(),
                     vertical: ScrollLane::new(),
@@ -208,6 +258,9 @@ impl App {
             should_change_directory_on_quit: true,
             chooser: ChooserState::default(),
             pending_terminal_task: None,
+            parked_primary: None,
+            secondary_focus_right: false,
+            remembered_secondary: None,
         };
         app.file_browser.sort_mode = crate::config::ui().default_sort;
         app.file_browser.in_trash = crate::places::path_is_trash(&app.file_browser.cwd);

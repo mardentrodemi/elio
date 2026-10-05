@@ -27,6 +27,10 @@ pub(crate) struct FileBrowserState {
     pub(crate) in_trash: bool,
     pub(crate) directory_history: DirectoryHistory,
     pub(crate) selected_paths: SelectedPaths,
+    /// File where a mouse range starts. Shift+click selects through the clicked file.
+    pub(crate) selection_anchor: Option<PathBuf>,
+    /// First file marked with Space. The next plain click selects through that file.
+    pub(crate) space_range_anchor: Option<PathBuf>,
     pub(crate) directory_item_count_cache: HashMap<DirectoryItemCountKey, Option<usize>>,
     pub(crate) directory_item_count_order: VecDeque<DirectoryItemCountKey>,
     pub(crate) directory_count_viewport: Option<DirectoryCountViewport>,
@@ -59,6 +63,8 @@ impl FileBrowserState {
             in_trash: false,
             directory_history: DirectoryHistory::default(),
             selected_paths: SelectedPaths::default(),
+            selection_anchor: None,
+            space_range_anchor: None,
             directory_item_count_cache: HashMap::new(),
             directory_item_count_order: VecDeque::new(),
             directory_count_viewport: None,
@@ -72,5 +78,46 @@ impl FileBrowserState {
 
     pub(crate) fn selected_entry(&self) -> Option<&Entry> {
         self.entries.get(self.selected)
+    }
+
+    /// Listing copy used as the temporary right-hand file pane.
+    ///
+    /// The copy starts at the same directory, selection, and scroll position.
+    /// Directory watches and in-flight load tokens stay with the original so the
+    /// second pane cannot consume the primary browser's jobs.
+    pub(crate) fn fork_for_secondary_pane(&self) -> Self {
+        const LOAD_TOKEN_OFFSET: u64 = 1 << 48;
+        let mut forked = Self::new(
+            self.cwd.clone(),
+            self.view_mode == ViewMode::Grid,
+            self.zoom_level,
+            self.show_hidden,
+        );
+        forked.entries = self.entries.clone();
+        forked.unfiltered_entries = self.unfiltered_entries.clone();
+        forked.local_filter = self.local_filter.clone();
+        forked.selected = self.selected;
+        forked.scroll_row = self.scroll_row;
+        forked.sort_mode = self.sort_mode;
+        forked.in_trash = self.in_trash;
+        forked.directory_history = self.directory_history.clone();
+        forked.selected_paths = self.selected_paths.clone();
+        forked.selection_anchor = self.selection_anchor.clone();
+        forked.space_range_anchor = self.space_range_anchor.clone();
+        forked.directory_item_count_cache = self.directory_item_count_cache.clone();
+        forked.directory_item_count_order = self.directory_item_count_order.clone();
+        forked.directory_count_viewport = self.directory_count_viewport;
+        forked.directory_view_memory = self.directory_view_memory.clone();
+        forked.directory_runtime.fingerprint = self.directory_runtime.fingerprint;
+        forked.directory_runtime.load_token = self
+            .directory_runtime
+            .load_token
+            .wrapping_add(LOAD_TOKEN_OFFSET);
+        forked.directory_runtime.fingerprint_token = self
+            .directory_runtime
+            .fingerprint_token
+            .wrapping_add(LOAD_TOKEN_OFFSET);
+        forked.directory_runtime.use_polling_reload = self.directory_runtime.use_polling_reload;
+        forked
     }
 }

@@ -8,15 +8,23 @@ use std::sync::Arc;
 
 impl App {
     pub(super) fn apply_directory_job_result(&mut self, build: DirectoryBuild) -> bool {
+        if !directory_load_matches(&self.file_browser, &build) {
+            if self
+                .parked_primary
+                .as_ref()
+                .is_some_and(|parked| directory_load_matches(parked, &build))
+            {
+                self.swap_with_parked_primary();
+                let applied = self.apply_directory_job_result(build);
+                self.swap_with_parked_primary();
+                return applied;
+            }
+            return false;
+        }
+
         let Some(load) = self.file_browser.directory_runtime.pending_load.clone() else {
             return false;
         };
-        if build.token != self.file_browser.directory_runtime.load_token
-            || build.token != load.token
-            || build.cwd != load.target_cwd
-        {
-            return false;
-        }
 
         self.file_browser.directory_runtime.pending_load = None;
 
@@ -179,4 +187,19 @@ impl App {
         self.apply_duplicate_result(build.result);
         true
     }
+}
+
+fn directory_load_matches(
+    browser: &crate::file_browser::FileBrowserState,
+    build: &DirectoryBuild,
+) -> bool {
+    browser
+        .directory_runtime
+        .pending_load
+        .as_ref()
+        .is_some_and(|load| {
+            build.token == browser.directory_runtime.load_token
+                && build.token == load.token
+                && build.cwd == load.target_cwd
+        })
 }

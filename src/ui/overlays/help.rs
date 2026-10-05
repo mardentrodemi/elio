@@ -87,6 +87,11 @@ pub(in crate::ui) fn render_help_overlay(
         keys.action(&kb.scroll_preview_right, "scroll right"),
         keys.action(&kb.toggle_preview, "toggle preview pane"),
         keys.action(&kb.fullscreen_preview, "fullscreen preview"),
+        keys.action(
+            &kb.secondary_browser,
+            "toggle a second file pane in place of preview",
+        ),
+        keys.action(&kb.focus_other_file_pane, "switch focus between file panes"),
     ]);
     let mouse_entries = vec![
         e("Click", "select item"),
@@ -411,6 +416,8 @@ fn clipboard_entries(keys: &HelpKeys<'_>) -> Vec<HelpEntry> {
     let kb = keys.kb;
     entries([
         keys.action(&kb.toggle_selection, "toggle selection"),
+        e("Ctrl+click", "toggle one file"),
+        e("Space, click", "select through the clicked file"),
         keys.action(&kb.select_all, "select all"),
         e("Esc", "clear selection"),
         keys.action(&kb.yank, "yank (copy)"),

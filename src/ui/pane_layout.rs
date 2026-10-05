@@ -1,4 +1,4 @@
-use super::file_browser_pane::render_file_browser_pane;
+use super::file_browser_pane::{BrowserPaneSource, render_browser_pane, render_file_browser_pane};
 use super::places_pane::render_places_pane;
 use super::preview_pane::render_preview_pane;
 use crate::{
@@ -63,6 +63,11 @@ pub(in crate::ui) fn render_panes(
         app.preview_fullscreen(),
     );
 
+    if app.parked_primary.is_some() {
+        render_secondary_browser_layout(frame, layout, app, state, palette);
+        return;
+    }
+
     if let Some(places) = layout.places {
         render_places_pane(frame, places, app, state, palette);
     }
@@ -71,6 +76,60 @@ pub(in crate::ui) fn render_panes(
     }
     if let Some(preview) = layout.preview {
         render_preview_pane(frame, preview, app, state, palette);
+    }
+}
+
+fn render_secondary_browser_layout(
+    frame: &mut Frame<'_>,
+    layout: PaneLayout,
+    app: &App,
+    state: &mut ScreenRegions,
+    palette: Palette,
+) {
+    if let Some(places) = layout.places {
+        render_places_pane(frame, places, app, state, palette);
+    }
+
+    if let (Some(files), Some(preview)) = (layout.file_browser, layout.preview) {
+        if let Some(parked) = &app.parked_primary {
+            let focus_right = app.secondary_focus_right;
+            let (left, right) = if focus_right {
+                (parked, &app.file_browser)
+            } else {
+                (&app.file_browser, parked)
+            };
+            render_browser_pane(
+                frame,
+                files,
+                BrowserPaneSource {
+                    browser: left,
+                    file_operations: &app.file_operations,
+                    capture_input: !focus_right,
+                    emphasize: !focus_right,
+                    pane: crate::app::EntryPane::Left,
+                },
+                state,
+                palette,
+            );
+            render_browser_pane(
+                frame,
+                preview,
+                BrowserPaneSource {
+                    browser: right,
+                    file_operations: &app.file_operations,
+                    capture_input: focus_right,
+                    emphasize: focus_right,
+                    pane: crate::app::EntryPane::Right,
+                },
+                state,
+                palette,
+            );
+        }
+        return;
+    }
+
+    if let Some(files) = layout.file_browser {
+        render_file_browser_pane(frame, files, app, state, palette);
     }
 }
 

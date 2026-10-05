@@ -63,6 +63,8 @@ pub(in crate::config) struct KeysConfigOverride {
     pub(super) scroll_preview_right: Option<KeyConfigOverride>,
     pub(super) scroll_preview_up: Option<KeyConfigOverride>,
     pub(super) scroll_preview_down: Option<KeyConfigOverride>,
+    pub(super) secondary_browser: Option<KeyConfigOverride>,
+    pub(super) focus_other_file_pane: Option<KeyConfigOverride>,
     #[serde(flatten)]
     pub(super) unknown: BTreeMap<String, toml::Value>,
 }

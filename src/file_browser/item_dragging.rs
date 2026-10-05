@@ -53,6 +53,10 @@ impl super::FileBrowserState {
             .unwrap_or_default()
     }
 
+    pub(crate) fn paths_for_drag(&self, candidate: &Path) -> Vec<PathBuf> {
+        self.drag_paths_for_candidate(candidate)
+    }
+
     fn drag_paths_for_candidate(&self, candidate: &Path) -> Vec<PathBuf> {
         if !self.selected_paths.is_empty() && self.selected_paths.contains(candidate) {
             return self.selected_paths_sorted();

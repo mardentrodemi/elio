@@ -125,7 +125,10 @@ impl App {
                 // If the user navigated away, only surface the status. Navigation will load the
                 // destination fresh if they return. If another queued paste targets this same
                 // directory, defer the reload until that paste finishes.
+                // A drop into the other file pane still has to refresh both listings: the
+                // destination is parked, and the focused pane is the source.
                 self.status = status;
+                self.reload_focused_after_drop_into_other(&dest_dir, nav_target.is_some());
             }
             if let Some(request) = self.file_operations.start_next_queued_paste() {
                 self.job_scheduler.submit_paste(request);
@@ -177,6 +180,7 @@ impl App {
                 // If the user navigated away, only surface the status. Navigation will load the
                 // source directory fresh if they return.
                 self.status = status;
+                self.reload_inactive_file_pane();
             }
         } else {
             self.file_operations.update_trash_progress(build.completed);
@@ -215,6 +219,7 @@ impl App {
                 });
             } else {
                 self.status = status;
+                self.reload_inactive_file_pane();
             }
         } else {
             self.file_operations

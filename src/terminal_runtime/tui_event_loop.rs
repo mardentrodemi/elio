@@ -254,6 +254,7 @@ fn push_keyboard_enhancement_if_supported<W: Write>(writer: &mut W) -> io::Resul
             KeyboardEnhancementFlags::DISAMBIGUATE_ESCAPE_CODES
                 | KeyboardEnhancementFlags::REPORT_ALL_KEYS_AS_ESCAPE_CODES
                 | KeyboardEnhancementFlags::REPORT_ALTERNATE_KEYS
+                | KeyboardEnhancementFlags::REPORT_EVENT_TYPES
         )
     ) {
         Ok(()) => Ok(()),
@@ -806,9 +807,7 @@ fn run_app(
         }
     }
 
-    let final_cwd = app
-        .should_change_directory_on_quit
-        .then(|| app.file_browser.cwd.clone());
+    let final_cwd = app.should_change_directory_on_quit.then(|| app.exit_cwd());
     let chooser = app.take_chooser_exit();
     app.queue_forced_iterm_preview_erase();
     let mut overlay_bytes = app.clear_preview_overlay()?;

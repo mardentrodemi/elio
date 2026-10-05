@@ -12,6 +12,13 @@ fn keys_default_bindings_are_sane() {
     assert_eq!(config.keys.action_for('V'), Some(Action::TogglePreview));
     assert_eq!(config.keys.fullscreen_preview, 'P');
     assert_eq!(config.keys.action_for('P'), Some(Action::FullscreenPreview));
+    assert_eq!(config.keys.secondary_browser, '\\');
+    assert_eq!(config.keys.action_for('\\'), Some(Action::SecondaryBrowser));
+    assert_eq!(config.keys.focus_other_file_pane, '|');
+    assert_eq!(
+        config.keys.action_for('|'),
+        Some(Action::FocusOtherFilePane)
+    );
     assert_eq!(config.keys.extract_archive, 'e');
     assert_eq!(config.keys.symlink_absolute, '-');
     assert_eq!(config.keys.symlink_relative, '_');

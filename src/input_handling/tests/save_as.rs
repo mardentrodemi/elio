@@ -136,6 +136,7 @@ fn save_as_double_click_opens_file_instead_of_save_prompt() {
         entry_hits: vec![EntryHit {
             rect: Rect::new(0, 1, 20, 1),
             index: file_index,
+            pane: EntryPane::Active,
         }],
         ..ScreenRegions::default()
     });

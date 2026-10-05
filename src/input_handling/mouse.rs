@@ -19,6 +19,7 @@ impl App {
 
     pub(crate) fn suppress_drag_until_button_up(&mut self) {
         self.file_browser.suppress_drag_until_button_up();
+        self.input.cross_pane_drag = None;
     }
 
     #[cfg(any(unix, test))]
@@ -29,13 +30,22 @@ impl App {
 
     #[cfg(any(unix, test))]
     fn entry_path_at(&self, column: u16, row: u16) -> Option<PathBuf> {
+        let hit = self.entry_hit_at(column, row)?;
+        self.path_in_pane(hit.pane, hit.index).map(|(path, _)| path)
+    }
+
+    fn entry_hit_at(&self, column: u16, row: u16) -> Option<EntryHit> {
         self.input
             .screen_regions
             .entry_hits
             .iter()
             .find(|hit| hit.rect.contains((column, row).into()))
-            .and_then(|hit| self.file_browser.entries.get(hit.index))
-            .map(|entry| entry.path.clone())
+            .cloned()
+    }
+
+    fn path_in_pane(&self, pane: EntryPane, index: usize) -> Option<(PathBuf, bool)> {
+        let entry = self.browser_for_visual_pane(pane)?.entries.get(index)?;
+        Some((entry.path.clone(), entry.is_dir()))
     }
 
     pub(crate) fn handle_mouse(&mut self, mouse: MouseEvent) -> Result<()> {
@@ -115,6 +125,7 @@ impl App {
 
         match mouse.kind {
             MouseEventKind::Down(MouseButton::Left) => {
+                self.input.cross_pane_drag = None;
                 self.clear_drag_state();
                 self.update_wheel_target_from_position(mouse.column, mouse.row);
                 if let Some(rect) = self.input.screen_regions.back_button
@@ -156,25 +167,36 @@ impl App {
                     return self.set_dir(target.path);
                 }
 
-                if let Some(hit) = self
-                    .input
-                    .screen_regions
-                    .entry_hits
-                    .iter()
-                    .find(|hit| hit.rect.contains((mouse.column, mouse.row).into()))
-                    .cloned()
-                {
-                    let Some((path, is_dir)) = self
-                        .file_browser
-                        .entries
-                        .get(hit.index)
-                        .map(|entry| (entry.path.clone(), entry.is_dir()))
-                    else {
+                if let Some(hit) = self.entry_hit_at(mouse.column, mouse.row) {
+                    let Some((path, is_dir)) = self.path_in_pane(hit.pane, hit.index) else {
                         return Ok(());
                     };
-                    self.remember_drag_candidate(path.clone());
-                    self.select_index(hit.index);
-                    if self.is_double_click(&path) {
+                    let mut modifiers = self.effective_mouse_modifiers(&mouse);
+                    let mut shift = modifiers.contains(KeyModifiers::SHIFT);
+                    let control = modifiers.contains(KeyModifiers::CONTROL);
+                    if self.secondary_browser_open() && !self.visual_pane_is_focused(hit.pane) {
+                        self.focus_other_file_pane();
+                        modifiers.remove(KeyModifiers::SHIFT);
+                        shift = false;
+                    }
+                    let extend_space_range =
+                        !shift && !control && self.file_browser.space_range_anchor.is_some();
+                    if shift || control || extend_space_range {
+                        self.suppress_drag_until_button_up();
+                    } else {
+                        let paths = self
+                            .browser_for_visual_pane(hit.pane)
+                            .map(|browser| browser.paths_for_drag(&path))
+                            .unwrap_or_default();
+                        self.input.cross_pane_drag = Some(CrossPaneDrag {
+                            paths,
+                            source: hit.pane,
+                            armed: false,
+                        });
+                        self.remember_drag_candidate(path.clone());
+                    }
+                    self.select_entry_with_mouse(hit.index, modifiers);
+                    if !shift && !control && self.is_double_click(&path) {
                         if self.chooser_mode() && !self.save_as_mode() && !is_dir {
                             self.confirm_chooser_path(&path);
                         } else {
@@ -186,9 +208,15 @@ impl App {
                         path,
                         at: Instant::now(),
                     });
+                } else if self.pointer_is_in_file_pane(mouse.column, mouse.row) {
+                    self.clear_selection();
+                    if self.pointer_is_in_unfocused_file_pane(mouse.column, mouse.row) {
+                        self.focus_other_file_pane();
+                    }
                 }
             }
             MouseEventKind::Up(_) => {
+                self.finish_cross_pane_drag(mouse.column, mouse.row)?;
                 self.clear_drag_state();
             }
             MouseEventKind::ScrollDown => {
@@ -210,6 +238,11 @@ impl App {
                 // are inaccurate (observed in some Alacritty/Ghostty configurations).
                 self.input.hover_panel = self.panel_target_at(mouse.column, mouse.row);
                 self.update_wheel_target_from_position(mouse.column, mouse.row);
+                if matches!(mouse.kind, MouseEventKind::Drag(_))
+                    && let Some(drag) = self.input.cross_pane_drag.as_mut()
+                {
+                    drag.armed = true;
+                }
             }
             _ => {}
         }
@@ -281,6 +314,113 @@ impl App {
         }
 
         self.input.last_wheel_target
+    }
+
+    fn pointer_is_in_file_pane(&self, column: u16, row: u16) -> bool {
+        let regions = &self.input.screen_regions;
+        let point = (column, row).into();
+        regions
+            .entries_panel
+            .is_some_and(|rect| rect.contains(point))
+            || regions
+                .left_entries_panel
+                .is_some_and(|rect| rect.contains(point))
+            || regions
+                .right_entries_panel
+                .is_some_and(|rect| rect.contains(point))
+    }
+
+    fn pointer_is_in_unfocused_file_pane(&self, column: u16, row: u16) -> bool {
+        if !self.secondary_browser_open() {
+            return false;
+        }
+        let regions = &self.input.screen_regions;
+        let pane = if self.secondary_focus_right {
+            regions.left_entries_panel
+        } else {
+            regions.right_entries_panel
+        };
+        pane.is_some_and(|rect| rect.contains((column, row).into()))
+    }
+
+    fn effective_mouse_modifiers(&self, mouse: &MouseEvent) -> KeyModifiers {
+        let mut modifiers = mouse.modifiers;
+        if self.input.held_modifiers.shift() {
+            modifiers |= KeyModifiers::SHIFT;
+        }
+        if self.input.held_modifiers.control() {
+            modifiers |= KeyModifiers::CONTROL;
+        }
+        modifiers
+    }
+
+    fn finish_cross_pane_drag(&mut self, column: u16, row: u16) -> Result<()> {
+        let Some(drag) = self.input.cross_pane_drag.take() else {
+            return Ok(());
+        };
+        if !drag.armed || drag.paths.is_empty() {
+            return Ok(());
+        }
+        let Some(dest) = self.cross_pane_drop_directory(column, row, drag.source) else {
+            return Ok(());
+        };
+        self.drop_cut_into_directory(dest, drag.paths)
+    }
+
+    fn cross_pane_drop_directory(
+        &self,
+        column: u16,
+        row: u16,
+        source: EntryPane,
+    ) -> Option<PathBuf> {
+        if !self.secondary_browser_open() {
+            return None;
+        }
+        let regions = &self.input.screen_regions;
+        let dest = if regions
+            .left_entries_panel
+            .is_some_and(|rect| rect.contains((column, row).into()))
+        {
+            EntryPane::Left
+        } else if regions
+            .right_entries_panel
+            .is_some_and(|rect| rect.contains((column, row).into()))
+        {
+            EntryPane::Right
+        } else {
+            return None;
+        };
+        if dest == source {
+            return None;
+        }
+        if let Some(hit) = self.entry_hit_at(column, row)
+            && hit.pane == dest
+            && let Some((path, true)) = self.path_in_pane(hit.pane, hit.index)
+        {
+            return Some(path);
+        }
+        self.browser_for_visual_pane(dest)
+            .map(|browser| browser.cwd.clone())
+    }
+
+    fn drop_cut_into_directory(&mut self, dest: PathBuf, paths: Vec<PathBuf>) -> Result<()> {
+        #[cfg(any(unix, test))]
+        {
+            let preparation = self.file_operations.prepare_drop(
+                &dest,
+                paths,
+                crate::file_operations::ClipOp::Cut,
+            );
+            if let Some(request) = preparation.request {
+                self.job_scheduler.submit_paste(request);
+            }
+            self.status = preparation.status;
+        }
+        #[cfg(not(any(unix, test)))]
+        {
+            let _ = (dest, paths);
+        }
+        Ok(())
     }
 
     pub(crate) fn is_double_click(&self, path: &Path) -> bool {

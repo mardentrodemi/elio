@@ -54,6 +54,10 @@ pub(crate) enum Action {
     ScrollPreviewRight,
     ScrollPreviewUp,
     ScrollPreviewDown,
+    /// Toggle the preview pane into a second file browser.
+    SecondaryBrowser,
+    /// Switch keyboard focus between the two file panes.
+    FocusOtherFilePane,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -492,6 +496,8 @@ pub(crate) struct KeyBindings {
     pub scroll_preview_right: KeyList,
     pub scroll_preview_up: KeyList,
     pub scroll_preview_down: KeyList,
+    pub secondary_browser: KeyList,
+    pub focus_other_file_pane: KeyList,
 }
 
 impl KeyBindings {
@@ -539,7 +545,7 @@ impl KeyBindings {
             .collect()
     }
 
-    fn bindings(&self) -> [(&KeyList, Action); 50] {
+    fn bindings(&self) -> [(&KeyList, Action); 52] {
         [
             (&self.quit, Action::Quit),
             (&self.quit_without_cd, Action::QuitWithoutCd),
@@ -591,6 +597,8 @@ impl KeyBindings {
             (&self.scroll_preview_right, Action::ScrollPreviewRight),
             (&self.scroll_preview_up, Action::ScrollPreviewUp),
             (&self.scroll_preview_down, Action::ScrollPreviewDown),
+            (&self.secondary_browser, Action::SecondaryBrowser),
+            (&self.focus_other_file_pane, Action::FocusOtherFilePane),
         ]
     }
 

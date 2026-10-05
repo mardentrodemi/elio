@@ -189,3 +189,5 @@
 # scroll_preview_down  = ["J", "shift+down"]
 # scroll_preview_left  = ["H", "shift+left"]
 # scroll_preview_right = ["L", "shift+right"]
+# secondary_browser    = "\\"  # toggle a second file pane in place of preview
+# focus_other_file_pane = "|"  # Shift+\ ; switch focus between the two file panes

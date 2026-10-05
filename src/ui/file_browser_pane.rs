@@ -1,11 +1,11 @@
 use super::helpers;
 use super::scrollbars::{render_browser_scrollbar, split_scrollbar_area};
-use crate::app::{App, EntryHit, ScreenRegions, ViewMetrics};
-use crate::file_browser::ViewMode;
-use crate::file_operations::ClipOp;
+use crate::app::{App, EntryHit, EntryPane, ScreenRegions, ViewMetrics};
+use crate::file_browser::{FileBrowserState, ViewMode};
+use crate::file_operations::{ClipOp, FileOperationsState};
 use crate::filesystem::{
-    Entry, format_size, format_size_parts, format_time_ago, sanitize_terminal_text,
-    symlink_target_display_label,
+    Entry, format_item_count, format_size, format_size_parts, format_time_ago,
+    sanitize_terminal_text, symlink_target_display_label,
 };
 use crate::theme::{self, Palette};
 use ratatui::{
@@ -16,6 +16,19 @@ use ratatui::{
     widgets::{Block, BorderType, Borders, Paragraph},
 };
 
+pub(super) struct BrowserPaneSource<'a> {
+    pub browser: &'a FileBrowserState,
+    pub file_operations: &'a FileOperationsState,
+    pub capture_input: bool,
+    pub emphasize: bool,
+    pub pane: EntryPane,
+}
+
+struct PaneCapture {
+    metrics: bool,
+    pane: EntryPane,
+}
+
 pub(super) fn render_file_browser_pane(
     frame: &mut Frame<'_>,
     area: Rect,
@@ -23,16 +36,58 @@ pub(super) fn render_file_browser_pane(
     state: &mut ScreenRegions,
     palette: Palette,
 ) {
-    state.entries_panel = Some(area);
-    let path_text = helpers::stable_path_label(
-        &app.file_browser.cwd,
-        area.width.saturating_sub(10) as usize,
+    render_browser_pane(
+        frame,
+        area,
+        BrowserPaneSource {
+            browser: &app.file_browser,
+            file_operations: &app.file_operations,
+            capture_input: true,
+            emphasize: false,
+            pane: EntryPane::Active,
+        },
+        state,
+        palette,
     );
+}
+
+pub(super) fn render_browser_pane(
+    frame: &mut Frame<'_>,
+    area: Rect,
+    source: BrowserPaneSource<'_>,
+    state: &mut ScreenRegions,
+    palette: Palette,
+) {
+    let BrowserPaneSource {
+        browser,
+        file_operations,
+        capture_input,
+        emphasize,
+        pane,
+    } = source;
+    match pane {
+        EntryPane::Left => state.left_entries_panel = Some(area),
+        EntryPane::Right => state.right_entries_panel = Some(area),
+        EntryPane::Active => {}
+    }
+    if capture_input {
+        state.entries_panel = Some(area);
+    }
+    let capture = PaneCapture {
+        metrics: capture_input,
+        pane,
+    };
+    let path_text =
+        helpers::stable_path_label(&browser.cwd, area.width.saturating_sub(10) as usize);
     let block = Block::default()
         .borders(Borders::ALL)
         .border_type(BorderType::Rounded)
         .style(Style::default().bg(palette.panel_alt).fg(palette.text))
-        .border_style(Style::default().fg(palette.border));
+        .border_style(Style::default().fg(if emphasize {
+            palette.accent
+        } else {
+            palette.border
+        }));
     frame.render_widget(&block, area);
     helpers::render_panel_title(
         frame,
@@ -56,18 +111,40 @@ pub(super) fn render_file_browser_pane(
     let inner = block.inner(area);
     helpers::fill_area(frame, inner, palette.panel_alt, palette.text);
 
-    if app.file_browser.view_mode == ViewMode::Grid {
-        render_grid_view(frame, inner, app, state, palette);
+    if browser.view_mode == ViewMode::Grid {
+        render_grid_view(
+            frame,
+            inner,
+            browser,
+            file_operations,
+            capture,
+            state,
+            palette,
+        );
     } else {
-        render_list_view(frame, inner, app, state, palette);
+        render_list_view(
+            frame,
+            inner,
+            browser,
+            file_operations,
+            capture,
+            state,
+            palette,
+        );
     }
 }
 
-fn entry_detail(app: &App, entry: &Entry) -> Option<String> {
+fn item_count_label(browser: &FileBrowserState, entry: &Entry) -> Option<String> {
+    browser
+        .directory_item_count(entry, browser.show_hidden || browser.in_trash)
+        .map(format_item_count)
+}
+
+fn entry_detail(browser: &FileBrowserState, entry: &Entry) -> Option<String> {
     if let Some(target) = symlink_target_detail(entry) {
         Some(target)
     } else if entry.is_dir() {
-        app.directory_item_count_label(entry)
+        item_count_label(browser, entry)
     } else {
         Some(format_size(entry.size))
     }
@@ -80,11 +157,11 @@ fn entry_modified(entry: &Entry) -> String {
         .unwrap_or_else(|| "unknown".to_string())
 }
 
-fn directory_secondary(app: &App, entry: &Entry) -> String {
+fn directory_secondary(browser: &FileBrowserState, entry: &Entry) -> String {
     if let Some(target) = symlink_target_detail(entry) {
         let mut parts = vec![target];
         if !entry.is_broken_symlink()
-            && let Some(count) = app.directory_item_count_label(entry)
+            && let Some(count) = item_count_label(browser, entry)
         {
             parts.push(count);
         }
@@ -92,7 +169,7 @@ fn directory_secondary(app: &App, entry: &Entry) -> String {
         return parts.join("  •  ");
     }
 
-    match app.directory_item_count_label(entry) {
+    match item_count_label(browser, entry) {
         Some(count) => format!("{count}  •  {}", entry_modified(entry)),
         None => entry_modified(entry),
     }
@@ -114,7 +191,9 @@ fn symlink_target_label(entry: &Entry) -> Option<String> {
 fn render_list_view(
     frame: &mut Frame<'_>,
     area: Rect,
-    app: &App,
+    browser: &FileBrowserState,
+    file_operations: &FileOperationsState,
+    capture: PaneCapture,
     state: &mut ScreenRegions,
     palette: Palette,
 ) {
@@ -127,13 +206,16 @@ fn render_list_view(
 
     const ROW_HEIGHT: u16 = 1;
     let row_height = ROW_HEIGHT;
-    state.metrics = ViewMetrics {
-        cols: 1,
-        rows_visible: (content_area.height / row_height.max(1)).max(1) as usize,
-    };
+    let rows_visible = (content_area.height / row_height.max(1)).max(1) as usize;
+    if capture.metrics {
+        state.metrics = ViewMetrics {
+            cols: 1,
+            rows_visible,
+        };
+    }
 
-    if app.file_browser.entries.is_empty() {
-        let message = if app.local_filter_has_query() {
+    if browser.entries.is_empty() {
+        let message = if browser.local_filter.has_query() {
             "No matches"
         } else {
             "This folder is empty"
@@ -142,32 +224,36 @@ fn render_list_view(
         return;
     }
 
-    for (visible_index, entry_index) in (app.file_browser.scroll_row
-        ..app.file_browser.entries.len())
-        .take(state.metrics.rows_visible)
+    for (visible_index, entry_index) in (browser.scroll_row..browser.entries.len())
+        .take(rows_visible)
         .enumerate()
     {
-        let entry = &app.file_browser.entries[entry_index];
+        let entry = &browser.entries[entry_index];
         let row = Rect {
             x: content_area.x,
             y: content_area.y + visible_index as u16 * row_height,
             width: content_area.width,
             height: row_height,
         };
-        let selected = entry_index == app.file_browser.selected;
-        let multi_selected = app.is_selected(&entry.path);
-        let clip_op = app.file_operations.clipboard_op_for(&entry.path);
+        let selected = entry_index == browser.selected;
+        let multi_selected = browser.is_selected(&entry.path);
+        let clip_op = file_operations.clipboard_op_for(&entry.path);
         let appearance = theme::resolve_browser_entry(entry);
         let icon_color = appearance.color;
-        let bg = if selected {
+        let bg = if selected || multi_selected {
             palette.selected_bg
         } else {
             palette.panel_alt
         };
         if row_height == 1 {
             frame.render_widget(
-                Paragraph::new(render_compact_list_row(
-                    app, entry, selected, row.width, palette,
+                Paragraph::new(render_compact_list_row_in(
+                    browser,
+                    file_operations,
+                    entry,
+                    selected,
+                    row.width,
+                    palette,
                 ))
                 .style(Style::default().bg(bg).fg(palette.text)),
                 row,
@@ -201,15 +287,15 @@ fn render_list_view(
                 columns[0],
             );
             let secondary = if entry.is_dir() {
-                directory_secondary(app, entry)
+                directory_secondary(browser, entry)
             } else if row_height >= 3 {
                 format!(
                     "{}  •  {}",
-                    entry_detail(app, entry).unwrap_or_default(),
+                    entry_detail(browser, entry).unwrap_or_default(),
                     entry_modified(entry)
                 )
             } else {
-                entry_detail(app, entry).unwrap_or_default()
+                entry_detail(browser, entry).unwrap_or_default()
             };
             frame.render_widget(
                 Paragraph::new(vec![
@@ -238,6 +324,7 @@ fn render_list_view(
         state.entry_hits.push(EntryHit {
             rect: row,
             index: entry_index,
+            pane: capture.pane,
         });
     }
 
@@ -245,16 +332,35 @@ fn render_list_view(
         render_browser_scrollbar(
             frame,
             sb,
-            app.file_browser.entries.len(),
-            state.metrics.rows_visible,
-            app.file_browser.scroll_row,
+            browser.entries.len(),
+            rows_visible,
+            browser.scroll_row,
             palette,
         );
     }
 }
 
+#[cfg(test)]
 pub(super) fn render_compact_list_row(
     app: &App,
+    entry: &Entry,
+    selected: bool,
+    row_width: u16,
+    palette: Palette,
+) -> Line<'static> {
+    render_compact_list_row_in(
+        &app.file_browser,
+        &app.file_operations,
+        entry,
+        selected,
+        row_width,
+        palette,
+    )
+}
+
+fn render_compact_list_row_in(
+    browser: &FileBrowserState,
+    file_operations: &FileOperationsState,
     entry: &Entry,
     selected: bool,
     row_width: u16,
@@ -270,8 +376,8 @@ pub(super) fn render_compact_list_row(
     const COMPACT_MAX_TRAILING_GAP: usize = 1;
     const COMPACT_SYMLINK_INLINE_MIN_WIDTH: usize = 12;
 
-    let multi_selected = app.is_selected(&entry.path);
-    let clip_op = app.file_operations.clipboard_op_for(&entry.path);
+    let multi_selected = browser.is_selected(&entry.path);
+    let clip_op = file_operations.clipboard_op_for(&entry.path);
     // All mark states take priority over the cursor colour for the bar — the
     // cursor position is already communicated by the row background.
     let marker_color = if clip_op == Some(ClipOp::Yank) {
@@ -308,7 +414,7 @@ pub(super) fn render_compact_list_row(
     let detail_text = if show_inline_symlink_target {
         String::new()
     } else {
-        compact_entry_detail(app, entry, COMPACT_DETAIL_SLOT_WIDTH).unwrap_or_default()
+        compact_entry_detail(browser, entry, COMPACT_DETAIL_SLOT_WIDTH).unwrap_or_default()
     };
     let detail_slot_width = if detail_text.is_empty() {
         0
@@ -505,13 +611,14 @@ fn pad_right(text: String, width: usize) -> String {
     format!("{text}{}", " ".repeat(width - visible))
 }
 
-fn compact_entry_detail(app: &App, entry: &Entry, width: usize) -> Option<String> {
+fn compact_entry_detail(browser: &FileBrowserState, entry: &Entry, width: usize) -> Option<String> {
     if entry.is_broken_symlink() {
         Some(helpers::clamp_label("broken", width))
     } else if entry.is_symlink() {
         Some(helpers::clamp_label("link", width))
     } else if entry.is_dir() {
-        app.directory_item_count_value(entry)
+        browser
+            .directory_item_count(entry, browser.show_hidden || browser.in_trash)
             .map(|count| format_compact_directory_count(count, width))
     } else {
         Some(format_compact_file_size(entry.size, width))
@@ -650,7 +757,9 @@ fn grid_zoom_spec(zoom: u8) -> GridZoomSpec {
 fn render_grid_view(
     frame: &mut Frame<'_>,
     area: Rect,
-    app: &App,
+    browser: &FileBrowserState,
+    file_operations: &FileOperationsState,
+    capture: PaneCapture,
     state: &mut ScreenRegions,
     palette: Palette,
 ) {
@@ -661,7 +770,7 @@ fn render_grid_view(
         helpers::fill_area(frame, sb, palette.panel_alt, palette.border);
     }
 
-    let spec = grid_zoom_spec(app.file_browser.zoom_level);
+    let spec = grid_zoom_spec(browser.zoom_level);
     let gap_x = spec.gap_x;
     let gap_y = spec.gap_y;
     let cols = ((content_area.width + gap_x) / (spec.tile_width_hint + gap_x)).max(1) as usize;
@@ -669,10 +778,12 @@ fn render_grid_view(
     let tile_width =
         (content_area.width.saturating_sub(total_gap_x) / cols as u16).max(spec.min_tile_width);
     let rows_visible = ((content_area.height + gap_y) / (spec.tile_height + gap_y)).max(1) as usize;
-    state.metrics = ViewMetrics { cols, rows_visible };
+    if capture.metrics {
+        state.metrics = ViewMetrics { cols, rows_visible };
+    }
 
-    if app.file_browser.entries.is_empty() {
-        let message = if app.local_filter_has_query() {
+    if browser.entries.is_empty() {
+        let message = if browser.local_filter.has_query() {
             "No matches"
         } else {
             "This folder is empty"
@@ -681,13 +792,10 @@ fn render_grid_view(
         return;
     }
 
-    let start = app.file_browser.scroll_row * cols;
+    let start = browser.scroll_row * cols;
     let limit = rows_visible * cols;
 
-    for (visible_index, entry_index) in (start..app.file_browser.entries.len())
-        .take(limit)
-        .enumerate()
-    {
+    for (visible_index, entry_index) in (start..browser.entries.len()).take(limit).enumerate() {
         let row = visible_index / cols;
         let col = visible_index % cols;
         let tile_x = content_area.x + col as u16 * (tile_width + gap_x);
@@ -705,27 +813,28 @@ fn render_grid_view(
             width: actual_tile_width,
             height: spec.tile_height,
         };
-        let entry = &app.file_browser.entries[entry_index];
+        let entry = &browser.entries[entry_index];
         let tile_state = TileState {
-            selected: entry_index == app.file_browser.selected,
-            multi_selected: app.is_selected(&entry.path),
-            clip_op: app.file_operations.clipboard_op_for(&entry.path),
+            selected: entry_index == browser.selected,
+            multi_selected: browser.is_selected(&entry.path),
+            clip_op: file_operations.clipboard_op_for(&entry.path),
         };
-        render_tile(frame, rect, app, entry, tile_state, palette, spec);
+        render_tile(frame, rect, browser, entry, tile_state, palette, spec);
         state.entry_hits.push(EntryHit {
             rect,
             index: entry_index,
+            pane: capture.pane,
         });
     }
 
     if let Some(sb) = scrollbar_area {
-        let total_rows = app.file_browser.entries.len().div_ceil(cols);
+        let total_rows = browser.entries.len().div_ceil(cols);
         render_browser_scrollbar(
             frame,
             sb,
             total_rows,
             rows_visible,
-            app.file_browser.scroll_row,
+            browser.scroll_row,
             palette,
         );
     }
@@ -740,7 +849,7 @@ struct TileState {
 fn render_tile(
     frame: &mut Frame<'_>,
     rect: Rect,
-    app: &App,
+    browser: &FileBrowserState,
     entry: &Entry,
     tile_state: TileState,
     palette: Palette,
@@ -754,7 +863,7 @@ fn render_tile(
     let appearance = theme::resolve_browser_entry(entry);
     let icon_color = appearance.color;
     let background = palette.surface;
-    let content_bg = if selected {
+    let content_bg = if selected || multi_selected {
         theme::mix_color(palette.selected_bg, icon_color, 22)
     } else {
         palette.surface
@@ -830,7 +939,7 @@ fn render_tile(
         horizontal: spec.padding_x,
         vertical: 0,
     });
-    let detail = entry_detail(app, entry);
+    let detail = entry_detail(browser, entry);
     let modified = entry_modified(entry);
     let mut lines = Vec::new();
     if spec.show_kind_hint {

@@ -1,13 +1,10 @@
 use super::App;
 use crate::chooser::ChooserExit;
 use crate::file_browser::{SelectionChange, ViewMode};
+use crossterm::event::KeyModifiers;
 use std::path::{Path, PathBuf};
 
 impl App {
-    pub fn is_selected(&self, path: &std::path::Path) -> bool {
-        self.file_browser.is_selected(path)
-    }
-
     pub fn selection_count(&self) -> usize {
         if let Some(overlay) = &self.duplicate_finder.session {
             return overlay.selected_paths.len();
@@ -28,22 +25,129 @@ impl App {
         self.file_browser.current_directory_escape_for_paths(paths)
     }
 
+    pub(crate) fn select_entry_with_mouse(&mut self, index: usize, modifiers: KeyModifiers) {
+        if self.file_browser.entries.is_empty() {
+            return;
+        }
+        let index = self.file_browser.clamped_selection_index(index);
+        let shift = modifiers.contains(KeyModifiers::SHIFT);
+        let control = modifiers.contains(KeyModifiers::CONTROL);
+        if shift {
+            self.select_range_from_focus(index, control);
+            return;
+        }
+        if control {
+            self.toggle_mouse_entry(index);
+            return;
+        }
+        if self.extend_space_range_to(index) {
+            return;
+        }
+        self.file_browser.selected_paths.clear();
+        if let Some(path) = self.file_browser.entries.get(index) {
+            self.file_browser.selection_anchor = Some(path.path.clone());
+        }
+        self.select_index(index);
+    }
+
+    /// Selects every entry from the focused file through `index`. The keyboard
+    /// cursor stays on the focused file.
+    fn select_range_from_focus(&mut self, index: usize, keep_existing: bool) {
+        let anchor_index = self.file_browser.selected;
+        if let Some(entry) = self.file_browser.entries.get(anchor_index) {
+            self.file_browser.selection_anchor = Some(entry.path.clone());
+        }
+        let blocked = if keep_existing {
+            self.file_browser.add_selection_range(anchor_index, index)
+        } else {
+            self.file_browser
+                .replace_selection_with_range(anchor_index, index)
+        };
+        if blocked {
+            self.status = "Cannot select nested paths".to_string();
+        } else {
+            self.status.clear();
+        }
+    }
+
+    fn toggle_mouse_entry(&mut self, index: usize) {
+        let Some(path) = self
+            .file_browser
+            .entries
+            .get(index)
+            .map(|entry| entry.path.clone())
+        else {
+            return;
+        };
+        match self.file_browser.toggle_selected_path(path.clone()) {
+            SelectionChange::NestingConflict => {
+                self.status = "Cannot select nested paths".to_string();
+            }
+            SelectionChange::Inserted | SelectionChange::Removed => {
+                self.status.clear();
+            }
+        }
+        self.file_browser.selection_anchor = Some(path);
+        self.select_index(index);
+    }
+
     pub(crate) fn toggle_selection(&mut self) {
         let Some(entry) = self.selected_entry() else {
             return;
         };
         let path = entry.path.clone();
-        match self.file_browser.toggle_selected_path(path) {
+        match self.file_browser.toggle_selected_path(path.clone()) {
             SelectionChange::NestingConflict => {
                 self.status = "Cannot select nested paths".to_string();
             }
-            SelectionChange::Inserted | SelectionChange::Removed => {
+            change @ (SelectionChange::Inserted | SelectionChange::Removed) => {
+                self.note_space_range_anchor(&path, matches!(change, SelectionChange::Inserted));
                 self.status.clear();
                 if self.file_browser.view_mode == ViewMode::List && !self.preview_fullscreen() {
                     self.move_vertical(1);
                 }
             }
         }
+    }
+
+    fn note_space_range_anchor(&mut self, path: &Path, inserted: bool) {
+        if inserted {
+            if self.file_browser.space_range_anchor.is_none() {
+                self.file_browser.space_range_anchor = Some(path.to_path_buf());
+            }
+            return;
+        }
+        if self.file_browser.space_range_anchor.as_deref() == Some(path)
+            || self.file_browser.selected_paths.is_empty()
+        {
+            self.file_browser.space_range_anchor = None;
+        }
+    }
+
+    fn extend_space_range_to(&mut self, index: usize) -> bool {
+        let Some(anchor) = self.file_browser.space_range_anchor.clone() else {
+            return false;
+        };
+        let Some(anchor_index) = self
+            .file_browser
+            .entries
+            .iter()
+            .position(|entry| entry.path == anchor)
+        else {
+            self.file_browser.space_range_anchor = None;
+            return false;
+        };
+        self.file_browser.space_range_anchor = None;
+        let blocked = self
+            .file_browser
+            .replace_selection_with_range(anchor_index, index);
+        if blocked {
+            self.status = "Cannot select nested paths".to_string();
+        } else {
+            self.status.clear();
+        }
+        self.select_index(index);
+        true
     }
 
     pub(crate) fn select_all(&mut self) {
