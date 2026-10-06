@@ -92,6 +92,7 @@ pub(in crate::ui) fn render_help_overlay(
             "toggle a second file pane in place of preview",
         ),
         keys.action(&kb.focus_other_file_pane, "switch focus between file panes"),
+        keys.action(&kb.swap_file_panes, "swap the two file panes"),
     ]);
     let mouse_entries = vec![
         e("Click", "select item"),
@@ -408,6 +409,7 @@ fn navigation_entries(keys: &HelpKeys<'_>) -> Vec<HelpEntry> {
             "cycle places",
         ),
         keys.pair_action(&kb.history_back, &kb.history_forward, "back / forward"),
+        keys.action(&kb.toggle_place_tab, "pin or unpin this folder in Places"),
     ]);
     entries(items)
 }

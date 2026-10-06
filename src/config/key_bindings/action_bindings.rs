@@ -58,6 +58,10 @@ pub(crate) enum Action {
     SecondaryBrowser,
     /// Switch keyboard focus between the two file panes.
     FocusOtherFilePane,
+    /// Exchange the directories shown in the left and right file panes.
+    SwapFilePanes,
+    /// Pin or unpin the active file pane's directory at the end of Places.
+    TogglePlaceTab,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -498,6 +502,8 @@ pub(crate) struct KeyBindings {
     pub scroll_preview_down: KeyList,
     pub secondary_browser: KeyList,
     pub focus_other_file_pane: KeyList,
+    pub swap_file_panes: KeyList,
+    pub toggle_place_tab: KeyList,
 }
 
 impl KeyBindings {
@@ -545,7 +551,7 @@ impl KeyBindings {
             .collect()
     }
 
-    fn bindings(&self) -> [(&KeyList, Action); 52] {
+    fn bindings(&self) -> [(&KeyList, Action); 54] {
         [
             (&self.quit, Action::Quit),
             (&self.quit_without_cd, Action::QuitWithoutCd),
@@ -599,6 +605,8 @@ impl KeyBindings {
             (&self.scroll_preview_down, Action::ScrollPreviewDown),
             (&self.secondary_browser, Action::SecondaryBrowser),
             (&self.focus_other_file_pane, Action::FocusOtherFilePane),
+            (&self.swap_file_panes, Action::SwapFilePanes),
+            (&self.toggle_place_tab, Action::TogglePlaceTab),
         ]
     }
 

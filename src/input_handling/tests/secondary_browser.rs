@@ -121,6 +121,78 @@ fn shift_backslash_switches_focus_between_file_panes() {
 }
 
 #[test]
+fn ctrl_backslash_swaps_the_two_file_panes() {
+    let root = temp_path("secondary-browser-swap");
+    let left = root.join("left");
+    let right = root.join("right");
+    fs::create_dir_all(&left).expect("left dir");
+    fs::create_dir_all(&right).expect("right dir");
+    fs::write(left.join("from-left.txt"), "l").expect("write left");
+    fs::write(right.join("from-right.txt"), "r").expect("write right");
+    let mut app = App::new_at(left.clone()).expect("app");
+
+    press_secondary(&mut app);
+    app.set_dir(right.clone()).expect("open right dir");
+    wait_for_directory_load(&mut app);
+    assert!(app.secondary_focus_right);
+    let focused_selected = app.file_browser.selected;
+
+    app.handle_event(Event::Key(KeyEvent::new(
+        KeyCode::Char('\\'),
+        KeyModifiers::CONTROL,
+    )))
+    .expect("swap panes");
+
+    assert!(!app.secondary_focus_right);
+    assert_eq!(app.file_browser.cwd, right);
+    assert_eq!(app.file_browser.selected, focused_selected);
+    assert_eq!(app.parked_primary.as_ref().unwrap().cwd, left);
+    assert_eq!(app.left_file_browser().cwd, right);
+    assert_eq!(app.right_file_browser().unwrap().cwd, left);
+    assert_eq!(app.exit_cwd(), right);
+
+    let mut repeat = KeyEvent::new(KeyCode::Char('\\'), KeyModifiers::CONTROL);
+    repeat.kind = KeyEventKind::Repeat;
+    app.handle_event(Event::Key(repeat))
+        .expect("repeat should not swap again");
+    assert!(!app.secondary_focus_right);
+    assert_eq!(app.left_file_browser().cwd, right);
+
+    app.handle_event(Event::Key(KeyEvent::new(
+        KeyCode::Char('\\'),
+        KeyModifiers::CONTROL,
+    )))
+    .expect("swap back");
+    assert!(app.secondary_focus_right);
+    assert_eq!(app.file_browser.cwd, right);
+    assert_eq!(app.parked_primary.as_ref().unwrap().cwd, left);
+    assert_eq!(app.left_file_browser().cwd, left);
+    assert_eq!(app.right_file_browser().unwrap().cwd, right);
+    assert_eq!(app.exit_cwd(), left);
+
+    cleanup_app_temp_root(app, root);
+}
+
+#[test]
+fn swap_does_nothing_while_the_second_pane_is_closed() {
+    let root = temp_path("secondary-browser-swap-closed");
+    fs::write(root.join("a.txt"), "a").expect("write a");
+    let mut app = App::new_at(root.clone()).expect("app");
+    let cwd = app.file_browser.cwd.clone();
+
+    app.handle_event(Event::Key(KeyEvent::new(
+        KeyCode::Char('\\'),
+        KeyModifiers::CONTROL,
+    )))
+    .expect("swap while closed");
+
+    assert!(!app.secondary_browser_open());
+    assert_eq!(app.file_browser.cwd, cwd);
+
+    cleanup_app_temp_root(app, root);
+}
+
+#[test]
 fn inactive_pane_drops_moved_file_after_cut_and_paste() {
     let root = temp_path("secondary-browser-refresh");
     let left = root.join("left");

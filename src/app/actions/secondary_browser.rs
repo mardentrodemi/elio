@@ -7,8 +7,8 @@ impl App {
         self.parked_primary.is_some()
     }
 
-    /// Directory elio should `cd` into on quit. The original left pane wins
-    /// while the preview slot is a second browser.
+    /// Directory elio should `cd` into on quit. The left pane wins while the
+    /// preview slot is a second browser.
     pub(crate) fn exit_cwd(&self) -> PathBuf {
         if self.secondary_browser_open() && self.secondary_focus_right {
             self.parked_primary
@@ -90,6 +90,20 @@ impl App {
             "Focus: right file pane".to_string()
         } else {
             "Focus: left file pane".to_string()
+        };
+    }
+
+    /// Move each file pane to the other side. Focus stays on the same directory,
+    /// so it follows that directory to its new side.
+    pub(crate) fn swap_file_panes(&mut self) {
+        if !self.secondary_browser_open() {
+            return;
+        }
+        self.secondary_focus_right = !self.secondary_focus_right;
+        self.status = if self.secondary_focus_right {
+            "File panes swapped — focus: right".to_string()
+        } else {
+            "File panes swapped — focus: left".to_string()
         };
     }
 

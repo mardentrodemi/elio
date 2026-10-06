@@ -1,10 +1,11 @@
 use super::devices::mounted_device_items;
 use crate::config::{BuiltinPlace, PlaceEntrySpec, PlacesConfig};
+use serde::{Deserialize, Serialize};
 #[cfg(all(unix, not(any(target_os = "macos", target_os = "ios"))))]
 use std::{collections::HashMap, ffi::OsString, os::unix::ffi::OsStringExt};
 use std::{
     collections::HashSet,
-    fs,
+    fs, io,
     path::{Path, PathBuf},
     time::{Duration, Instant},
 };
@@ -63,13 +64,33 @@ pub enum PlaceRow {
 pub(crate) struct PlacesState {
     pub(crate) rows: Vec<PlaceRow>,
     pub(crate) last_refresh_at: Instant,
+    /// Folders pinned from the active file pane. Saved across launches.
+    session_tabs: Vec<PlaceItem>,
+    store_path: Option<PathBuf>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub(crate) enum PlaceTabChange {
+    Added { title: String },
+    Removed { title: String },
+    AlreadyListed { title: String },
 }
 
 impl PlacesState {
     pub(crate) fn new() -> Self {
+        Self::with_store(default_place_tabs_path())
+    }
+
+    pub(crate) fn with_store(store_path: Option<PathBuf>) -> Self {
+        let session_tabs = store_path
+            .as_deref()
+            .map(load_saved_place_tabs)
+            .unwrap_or_default();
         Self {
             rows: Vec::new(),
             last_refresh_at: Instant::now(),
+            session_tabs,
+            store_path,
         }
     }
 
@@ -82,13 +103,120 @@ impl PlacesState {
 
     pub(crate) fn refresh(&mut self) -> bool {
         self.last_refresh_at = Instant::now();
-        let rows = build_place_rows();
+        let rows = insert_session_tabs(build_place_rows(), &self.session_tabs);
         if rows == self.rows {
             return false;
         }
         self.rows = rows;
         true
     }
+
+    /// Pin the active pane's directory at the end of Places, or remove that pin.
+    pub(crate) fn toggle_session_tab(&mut self, path: &Path) -> PlaceTabChange {
+        let identity = path_identity_key(path);
+        if let Some(index) = self
+            .session_tabs
+            .iter()
+            .position(|item| item.identity_path == identity)
+        {
+            let title = self.session_tabs.remove(index).title;
+            self.rows = insert_session_tabs(build_place_rows(), &self.session_tabs);
+            self.save_session_tabs();
+            return PlaceTabChange::Removed { title };
+        }
+
+        let configured = build_place_rows();
+        if let Some(title) = configured.iter().find_map(|row| {
+            row.item()
+                .filter(|item| item.identity_path == identity)
+                .map(|item| item.title.clone())
+        }) {
+            return PlaceTabChange::AlreadyListed { title };
+        }
+
+        let item = session_place_item(path.to_path_buf());
+        let title = item.title.clone();
+        self.session_tabs.push(item);
+        self.rows = insert_session_tabs(configured, &self.session_tabs);
+        self.save_session_tabs();
+        PlaceTabChange::Added { title }
+    }
+
+    fn save_session_tabs(&self) {
+        let Some(path) = &self.store_path else {
+            return;
+        };
+        if let Err(error) = save_place_tabs(path, &self.session_tabs) {
+            eprintln!(
+                "elio: failed to save pinned places to {}: {error}",
+                path.display()
+            );
+        }
+    }
+}
+
+fn default_place_tabs_path() -> Option<PathBuf> {
+    // Unit tests construct a full app and must not read or write the user's pins.
+    if cfg!(test) {
+        return None;
+    }
+    crate::config::config_dir().map(|dir| dir.join("place_tabs.toml"))
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+struct PlaceTabsFile {
+    #[serde(default)]
+    paths: Vec<PathBuf>,
+}
+
+fn load_saved_place_tabs(path: &Path) -> Vec<PlaceItem> {
+    let contents = match fs::read_to_string(path) {
+        Ok(contents) => contents,
+        Err(error) if error.kind() == io::ErrorKind::NotFound => return Vec::new(),
+        Err(error) => {
+            eprintln!(
+                "elio: failed to read pinned places from {}: {error}",
+                path.display()
+            );
+            return Vec::new();
+        }
+    };
+    let parsed: PlaceTabsFile = match toml::from_str(&contents) {
+        Ok(parsed) => parsed,
+        Err(error) => {
+            eprintln!(
+                "elio: failed to load pinned places from {}: {error}",
+                path.display()
+            );
+            return Vec::new();
+        }
+    };
+    let mut items = Vec::new();
+    let mut seen = HashSet::new();
+    for path in parsed.paths {
+        if path.as_os_str().is_empty() {
+            continue;
+        }
+        let item = session_place_item(path);
+        if seen.insert(item.identity_path.clone()) {
+            items.push(item);
+        }
+    }
+    items
+}
+
+fn save_place_tabs(path: &Path, tabs: &[PlaceItem]) -> io::Result<()> {
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent)?;
+    }
+    let file = PlaceTabsFile {
+        paths: tabs.iter().map(|tab| tab.path.clone()).collect(),
+    };
+    let contents = toml::to_string_pretty(&file)
+        .map_err(|error| io::Error::new(io::ErrorKind::InvalidData, error.to_string()))?;
+    let temporary = path.with_extension("toml.tmp");
+    fs::write(&temporary, contents)?;
+    fs::rename(&temporary, path)
 }
 
 impl PlaceRow {
@@ -437,6 +565,44 @@ fn place_symlink_state(path: &Path) -> Option<PlaceSymlinkState> {
         } else {
             PlaceSymlinkState::Broken
         },
+    )
+}
+
+pub(super) fn insert_session_tabs(mut rows: Vec<PlaceRow>, tabs: &[PlaceItem]) -> Vec<PlaceRow> {
+    if tabs.is_empty() {
+        return rows;
+    }
+    let insert_at = rows
+        .iter()
+        .position(|row| matches!(row, PlaceRow::Section { .. }))
+        .unwrap_or(rows.len());
+    let mut offset = 0;
+    for tab in tabs {
+        let already_listed = rows.iter().any(|row| {
+            row.item()
+                .is_some_and(|item| item.identity_path == tab.identity_path)
+        });
+        if already_listed {
+            continue;
+        }
+        rows.insert(insert_at + offset, PlaceRow::Item(tab.clone()));
+        offset += 1;
+    }
+    rows
+}
+
+fn session_place_item(path: PathBuf) -> PlaceItem {
+    let title = path
+        .file_name()
+        .and_then(|name| name.to_str())
+        .filter(|name| !name.is_empty())
+        .map(ToOwned::to_owned)
+        .unwrap_or_else(|| path.display().to_string());
+    place_item(
+        PlaceKind::Custom,
+        title,
+        place_icon(&path, None, CUSTOM_PLACE_ICON),
+        path,
     )
 }
 

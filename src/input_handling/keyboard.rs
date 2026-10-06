@@ -438,6 +438,20 @@ impl App {
             return Ok(());
         }
 
+        if configured_action == Some(crate::config::Action::SwapFilePanes) {
+            if key.kind == KeyEventKind::Press {
+                self.swap_file_panes();
+            }
+            return Ok(());
+        }
+
+        if configured_action == Some(crate::config::Action::TogglePlaceTab) {
+            if key.kind == KeyEventKind::Press {
+                self.toggle_place_tab();
+            }
+            return Ok(());
+        }
+
         if configured_action == Some(crate::config::Action::SecondaryBrowser) {
             if key.kind == KeyEventKind::Press {
                 self.toggle_secondary_browser();
@@ -603,6 +617,8 @@ impl App {
             }
             Action::SecondaryBrowser => self.toggle_secondary_browser(),
             Action::FocusOtherFilePane => self.focus_other_file_pane(),
+            Action::SwapFilePanes => self.swap_file_panes(),
+            Action::TogglePlaceTab => self.toggle_place_tab(),
         }
         Ok(())
     }

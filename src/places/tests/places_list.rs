@@ -1,10 +1,12 @@
 #[cfg(all(unix, not(any(target_os = "macos", target_os = "ios"))))]
 use super::super::places_list::parse_user_dir;
 use super::super::places_list::{
-    PlaceResolutionContext, build_place_rows_with_context, resolve_personal_dir,
+    PlaceResolutionContext, build_place_rows_with_context, insert_session_tabs,
+    resolve_personal_dir,
 };
-use super::super::{PlaceKind, PlaceRow};
+use super::super::{PlaceItem, PlaceKind, PlaceRow};
 use crate::config::{BuiltinPlace, PlaceEntrySpec, PlacesConfig};
+use crate::places::{PlaceTabChange, PlacesState};
 use std::{
     fs,
     path::{Path, PathBuf},
@@ -441,6 +443,100 @@ fn symlinked_places_use_link_icon_unless_icon_is_configured() {
     assert_eq!(items[3].icon, "L");
     assert_eq!(items[4].title, "Broken");
     assert_eq!(items[4].icon, "󰌺");
+
+    fs::remove_dir_all(root).expect("failed to remove temp root");
+}
+
+#[test]
+fn session_tabs_land_at_the_end_of_places_before_devices() {
+    let home = PlaceItem::new(
+        PlaceKind::Home,
+        "Home",
+        "h",
+        PathBuf::from("/home"),
+        PathBuf::from("/home"),
+    );
+    let projects = PlaceItem::new(
+        PlaceKind::Custom,
+        "projects",
+        "p",
+        PathBuf::from("/work/projects"),
+        PathBuf::from("/work/projects"),
+    );
+    let notes = PlaceItem::new(
+        PlaceKind::Custom,
+        "notes",
+        "n",
+        PathBuf::from("/work/notes"),
+        PathBuf::from("/work/notes"),
+    );
+    let disk = PlaceItem::new(
+        PlaceKind::Device { removable: false },
+        "disk",
+        "d",
+        PathBuf::from("/mnt/disk"),
+        PathBuf::from("/mnt/disk"),
+    );
+    let rows = insert_session_tabs(
+        vec![
+            PlaceRow::Item(home),
+            PlaceRow::Section { title: "Devices" },
+            PlaceRow::Item(disk),
+        ],
+        &[projects, notes.clone()],
+    );
+
+    let labels: Vec<&str> = rows
+        .iter()
+        .map(|row| match row {
+            PlaceRow::Item(item) => item.title.as_str(),
+            PlaceRow::Section { title } => title,
+        })
+        .collect();
+    assert_eq!(labels, ["Home", "projects", "notes", "Devices", "disk"]);
+
+    let rows = insert_session_tabs(rows, &[notes]);
+    let labels: Vec<&str> = rows
+        .iter()
+        .map(|row| match row {
+            PlaceRow::Item(item) => item.title.as_str(),
+            PlaceRow::Section { title } => title,
+        })
+        .collect();
+    assert_eq!(labels, ["Home", "projects", "notes", "Devices", "disk"]);
+}
+
+#[test]
+fn pinned_places_survive_a_restart() {
+    let root = temp_path("place-tabs-store");
+    let folder = root.join("kept");
+    fs::create_dir_all(&folder).expect("folder");
+    let store = root.join("place_tabs.toml");
+
+    let mut places = PlacesState::with_store(Some(store.clone()));
+    assert!(matches!(
+        places.toggle_session_tab(&folder),
+        PlaceTabChange::Added { .. }
+    ));
+
+    let mut reloaded = PlacesState::with_store(Some(store.clone()));
+    reloaded.refresh();
+    let identity = fs::canonicalize(&folder).unwrap_or_else(|_| folder.clone());
+    assert!(reloaded.rows.iter().any(|row| {
+        row.item()
+            .is_some_and(|item| item.identity_path == identity)
+    }));
+
+    assert!(matches!(
+        reloaded.toggle_session_tab(&folder),
+        PlaceTabChange::Removed { .. }
+    ));
+    let mut cleared = PlacesState::with_store(Some(store));
+    cleared.refresh();
+    assert!(!cleared.rows.iter().any(|row| {
+        row.item()
+            .is_some_and(|item| item.identity_path == identity)
+    }));
 
     fs::remove_dir_all(root).expect("failed to remove temp root");
 }

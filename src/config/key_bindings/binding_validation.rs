@@ -357,6 +357,18 @@ pub(super) fn resolve_key_overrides(
             override_value: overrides.focus_other_file_pane,
             default: defaults.focus_other_file_pane.clone(),
         },
+        RawBinding {
+            name: "swap_file_panes",
+            action: Action::SwapFilePanes,
+            override_value: overrides.swap_file_panes,
+            default: defaults.swap_file_panes.clone(),
+        },
+        RawBinding {
+            name: "toggle_place_tab",
+            action: Action::TogglePlaceTab,
+            override_value: overrides.toggle_place_tab,
+            default: defaults.toggle_place_tab.clone(),
+        },
     ];
 
     // Step 1: parse each override independently, falling back to default on
@@ -465,6 +477,8 @@ pub(super) fn resolve_key_overrides(
         scroll_preview_down: resolved(49),
         secondary_browser: resolved(50),
         focus_other_file_pane: resolved(51),
+        swap_file_panes: resolved(52),
+        toggle_place_tab: resolved(53),
     }
 }
 

@@ -191,3 +191,5 @@
 # scroll_preview_right = ["L", "shift+right"]
 # secondary_browser    = "\\"  # toggle a second file pane in place of preview
 # focus_other_file_pane = "|"  # Shift+\ ; switch focus between the two file panes
+# swap_file_panes      = "ctrl+\\"  # exchange the left and right file panes
+# toggle_place_tab     = ["F", "А"]  # Shift+F ; pin or unpin the active folder in Places
