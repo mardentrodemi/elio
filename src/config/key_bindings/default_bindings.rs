@@ -78,7 +78,7 @@ impl Default for KeyBindings {
             secondary_browser: KeyList::one('\\'),
             focus_other_file_pane: KeyList::one('|'),
             swap_file_panes: KeyList(vec![KeySpec::ctrl_char('\\')]),
-            toggle_place_tab: KeyList(vec![KeySpec::char('F'), KeySpec::char('А')]),
+            toggle_place_tab: KeyList::one('F'),
         }
     }
 }

@@ -65,21 +65,6 @@ fn shift_f_pins_and_unpins_the_active_folder_in_places() {
 }
 
 #[test]
-fn cyrillic_shift_a_pins_the_same_way() {
-    let root = temp_path("place-tab-cyrillic");
-    let folder = root.join("заметки");
-    fs::create_dir_all(&folder).expect("folder");
-    let mut app = App::new_at(folder).expect("app");
-
-    press_pin(&mut app, 'А');
-    assert!(cwd_pin_is_last_place(&app));
-    press_pin(&mut app, 'А');
-    assert!(!lists_cwd(&app));
-
-    cleanup_app_temp_root(app, root);
-}
-
-#[test]
 fn pinning_another_folder_keeps_the_earlier_pin() {
     let root = temp_path("place-tab-two");
     let first = root.join("first");

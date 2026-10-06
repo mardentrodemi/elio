@@ -26,9 +26,8 @@ fn keys_default_bindings_are_sane() {
             .action_for_key(KeyEvent::new(KeyCode::Char('\\'), KeyModifiers::CONTROL,)),
         Some(Action::SwapFilePanes)
     );
-    assert_eq!(config.keys.toggle_place_tab.to_string(), "F/А");
+    assert_eq!(config.keys.toggle_place_tab, 'F');
     assert_eq!(config.keys.action_for('F'), Some(Action::TogglePlaceTab));
-    assert_eq!(config.keys.action_for('А'), Some(Action::TogglePlaceTab));
     assert_eq!(config.keys.extract_archive, 'e');
     assert_eq!(config.keys.symlink_absolute, '-');
     assert_eq!(config.keys.symlink_relative, '_');
