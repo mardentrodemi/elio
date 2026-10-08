@@ -9,6 +9,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Added support for using commands to provide destination paths for custom Go To entries. ([#315])
+
+### Fixed
+
+- Fixed text input fields ignoring Caps Lock. ([#321])
+- Fixed Ghostty showing configuration errors when opening the FileChooser portal. ([#324])
+
+## [1.13.0] - 2026-10-07
+
+### Added
+
 - Added XDG Desktop Portal FileChooser integration on Linux and FreeBSD, allowing elio to serve as the file chooser for desktop applications via `elio portal enable`, with independent routing for different desktop environments or window managers.
 - Added a Nix flake.
 - Added `Tab` as a keybinding to switch between files and folders in Fuzzy Find without clearing the query. ([#296])
@@ -347,7 +358,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Trash and restore support for safer file management workflows.
 - Optional external-tool integrations such as Poppler, ffmpeg, ffprobe, resvg, and 7-Zip for richer previews and metadata.
 
-[Unreleased]: https://github.com/elio-fm/elio/compare/v1.12.0...HEAD
+[Unreleased]: https://github.com/elio-fm/elio/compare/v1.13.0...HEAD
+[1.13.0]: https://github.com/elio-fm/elio/compare/v1.12.0...v1.13.0
 [1.12.0]: https://github.com/elio-fm/elio/compare/v1.11.2...v1.12.0
 [1.11.2]: https://github.com/elio-fm/elio/compare/v1.11.1...v1.11.2
 [1.11.1]: https://github.com/elio-fm/elio/compare/v1.11.0...v1.11.1
@@ -365,6 +377,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 [1.1.0]: https://github.com/elio-fm/elio/compare/v1.0.1...v1.1.0
 [1.0.1]: https://github.com/elio-fm/elio/compare/v1.0.0...v1.0.1
 [1.0.0]: https://github.com/elio-fm/elio/releases/tag/v1.0.0
+[#324]: https://github.com/elio-fm/elio/issues/324
+[#321]: https://github.com/elio-fm/elio/issues/321
+[#315]: https://github.com/elio-fm/elio/issues/315
 [#314]: https://github.com/elio-fm/elio/issues/314
 [#303]: https://github.com/elio-fm/elio/issues/303
 [#296]: https://github.com/elio-fm/elio/issues/296
