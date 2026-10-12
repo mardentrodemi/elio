@@ -15,13 +15,13 @@ Navigation, file operations, previews, themes, and the rest of Elio behave as in
 | Open or close the second file pane | `\` |
 | Move focus between the two file panes | `Shift+\` |
 | Swap the two file panes | `Ctrl+\` |
-| Pin or unpin the current folder in Places | `Shift+F` |
+| Pin or unpin the current folder in Places | `Shift+B` |
 
 `\` opens the second pane and moves focus to it. Press `\` again to close the pane and restore the preview. `Shift+\` switches keyboard focus between the left and right panes. A click on a pane also moves focus to it.
 
 `Ctrl+\` swaps the panes: the left directory moves to the right, the right directory moves to the left, and focus stays on the same directory.
 
-`Shift+F` pins the active pane's folder at the end of Places, before Devices. Press `Shift+F` again in that folder to remove the pin. Pins are saved in `place_tabs.toml` next to the Elio config and stay there until you unpin them, including after elio quits. A folder that is already in Places is not added a second time.
+`Shift+B` pins the active pane's folder at the end of Places, before Devices. Press `Shift+B` again in that folder to remove the pin. Pins are saved in `place_tabs.toml` next to the Elio config and stay there until you unpin them, including after elio quits. A folder that is already in Places is not added a second time.
 
 ### Changing the keys
 
@@ -38,7 +38,7 @@ Add a `[keys]` section to the Elio config. Only the keys you set here change; ev
 secondary_browser = "\\"
 focus_other_file_pane = "|"
 swap_file_panes = "ctrl+\\"
-toggle_place_tab = "F"
+toggle_place_tab = "B"
 ```
 
 | Config key | What it does |
@@ -48,7 +48,7 @@ toggle_place_tab = "F"
 | `swap_file_panes` | Swap the two file panes |
 | `toggle_place_tab` | Pin or unpin the current folder in Places |
 
-`Shift+\` produces `|` on a standard US layout, so that binding is written as `"|"`. `Shift+F` produces `F`. In a double-quoted TOML string a backslash is written twice, so `Ctrl+\` is `"ctrl+\\"`.
+`Shift+\` produces `|` on a standard US layout, so that binding is written as `"|"`. `Shift+B` produces `B`. In a double-quoted TOML string a backslash is written twice, so `Ctrl+\` is `"ctrl+\\"`.
 
 Replace the quoted values to assign different keys. An annotated copy of the full configuration, including these entries, is in [`examples/config.toml`](examples/config.toml).
 

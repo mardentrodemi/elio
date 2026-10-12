@@ -37,27 +37,27 @@ fn lists_cwd(app: &App) -> bool {
 }
 
 #[test]
-fn shift_f_pins_and_unpins_the_active_folder_in_places() {
+fn shift_b_pins_and_unpins_the_active_folder_in_places() {
     let root = temp_path("place-tab");
     let folder = root.join("notes");
     fs::create_dir_all(&folder).expect("folder");
     let mut app = App::new_at(folder.clone()).expect("app");
     assert!(!lists_cwd(&app));
 
-    press_pin(&mut app, 'F');
+    press_pin(&mut app, 'B');
     assert!(cwd_pin_is_last_place(&app));
     assert!(app.status.contains("Pinned"));
 
     app.places.refresh();
     assert!(cwd_pin_is_last_place(&app));
 
-    let mut repeat = KeyEvent::new(KeyCode::Char('F'), KeyModifiers::SHIFT);
+    let mut repeat = KeyEvent::new(KeyCode::Char('B'), KeyModifiers::SHIFT);
     repeat.kind = KeyEventKind::Repeat;
     app.handle_event(Event::Key(repeat))
         .expect("repeat should keep the pin");
     assert!(cwd_pin_is_last_place(&app));
 
-    press_pin(&mut app, 'F');
+    press_pin(&mut app, 'B');
     assert!(!lists_cwd(&app));
     assert!(app.status.contains("Removed"));
 
@@ -73,10 +73,10 @@ fn pinning_another_folder_keeps_the_earlier_pin() {
     fs::create_dir_all(&second).expect("second");
     let mut app = App::new_at(first.clone()).expect("app");
 
-    press_pin(&mut app, 'F');
+    press_pin(&mut app, 'B');
     app.set_dir(second).expect("open second");
     wait_for_directory_load(&mut app);
-    press_pin(&mut app, 'F');
+    press_pin(&mut app, 'B');
 
     let labels: Vec<&str> = app
         .places
