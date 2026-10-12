@@ -17,7 +17,9 @@ Navigation, file operations, previews, themes, and the rest of Elio behave as in
 | Swap the two file panes | `Ctrl+\` |
 | Pin or unpin the current folder in Places | `Shift+B` |
 
-`\` opens the second pane and moves focus to it. Press `\` again to close the pane and restore the preview. `Shift+\` switches keyboard focus between the left and right panes. A click on a pane also moves focus to it.
+`\` opens the second pane and moves focus to it. Press `\` again to close the pane and restore the preview.
+
+`Shift+\` switches keyboard focus between the left and right panes. A click on a pane also moves focus to it.
 
 `Ctrl+\` swaps the panes: the left directory moves to the right, the right directory moves to the left, and focus stays on the same directory.
 
