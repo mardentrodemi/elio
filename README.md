@@ -26,7 +26,9 @@ Navigation, file operations, previews, themes, and the rest of Elio behave as in
 
 `Shift+B` pins the active pane's folder at the end of Places, before Devices. Press `Shift+B` again in that folder to remove the pin. Pins are saved in `place_tabs.toml` next to the Elio config and stay there until you unpin them, including after elio quits. A folder that is already in Places is not added a second time.
 
-`s` cycles the sort in the folder you are viewing: name, then modified, then size. The fork remembers that choice for the folder. The next time you open it, including after elio quits, it uses the saved sort instead of `[ui] default_sort`. The choice is stored in `folder_sort.toml` next to the Elio config, and only while it differs from the default. Press `s` until the folder is back on the default sort, and that saved choice is removed. Changing `default_sort` later leaves folders you already set as they are. When both panes show the same folder, they follow the same sort.
+`s` cycles the sort for the current folder (name, modified, size) and remembers it in `folder_sort.toml` until you cycle back to `[ui] default_sort`. That folder opens with the saved sort next time, including after elio quits. Changing the default does not rewrite saved folders. Both panes showing the same folder use the same sort.
+
+Mark the first file with `Space`, then click the last one. Every file from the first through the last is selected, and you can drag that selection from one pane to the other.
 
 ### Changing the keys
 
