@@ -173,14 +173,15 @@ fn preview_scroll_help_uses_standard_uppercase_notation() {
     assert_eq!(keys.key(&kb.scroll_preview_left), "H/Shift+←");
     assert_eq!(keys.key(&kb.scroll_preview_right), "L/Shift+→");
 
+    // `B` pins a folder in this fork, so the example override uses a free letter.
     let kb = KeyBindings::from_toml_str(
         r#"[keys]
 scroll_preview_left = "A"
-scroll_preview_right = "B"
+scroll_preview_right = "N"
 "#,
     );
     let keys = HelpKeys::new(&kb, HelpMode::Normal);
 
     assert_eq!(keys.key(&kb.scroll_preview_left), "A");
-    assert_eq!(keys.key(&kb.scroll_preview_right), "B");
+    assert_eq!(keys.key(&kb.scroll_preview_right), "N");
 }

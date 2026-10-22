@@ -1,5 +1,5 @@
 use super::*;
-use ratatui::style::Color;
+use ratatui::style::{Color, Modifier};
 use std::{
     env,
     ffi::OsString,
@@ -207,6 +207,27 @@ fn exact_file_rules_override_extension_defaults() {
 }
 
 #[test]
+fn legacy_grid_band_palette_keys_are_ignored() {
+    let theme = Theme::from_config_str(
+        r##"
+[palette]
+grid_selection_band = "#ffffff"
+grid_yank_band = "#ffffff"
+grid_cut_band = "#ffffff"
+"##,
+    )
+    .expect("legacy grid palette keys should not prevent a theme from loading");
+    let default_theme = Theme::default_theme();
+
+    assert_eq!(
+        theme.palette.selection_bar,
+        default_theme.palette.selection_bar
+    );
+    assert_eq!(theme.palette.yank_bar, default_theme.palette.yank_bar);
+    assert_eq!(theme.palette.cut_bar, default_theme.palette.cut_bar);
+}
+
+#[test]
 fn theme_file_overrides_class_icon_and_palette() {
     let theme = Theme::from_config_str(
         r##"
@@ -315,6 +336,133 @@ icon = "F"
     let resolved = theme.resolve(Path::new("Cargo.toml"), EntryKind::File);
     assert_eq!(resolved.class, FileClass::Config);
     assert_eq!(resolved.icon, "F");
+}
+
+#[test]
+fn name_colors_override_global_icon_color_fallback_by_rule_specificity() {
+    let theme = Theme::from_config_str(
+        r##"
+[palette]
+colored_names = true
+
+[classes.code]
+color = "#112233"
+name_color = "#223344"
+
+[extensions.rs]
+color = "#334455"
+name_color = "#445566"
+
+[files."special.rs"]
+name_color = "#556677"
+"##,
+    )
+    .expect("theme should parse");
+
+    let ordinary = theme.resolve(Path::new("main.rs"), EntryKind::File);
+    assert_eq!(ordinary.color, rgb(0x33, 0x44, 0x55));
+    assert_eq!(ordinary.name_color, Some(rgb(0x44, 0x55, 0x66)));
+    assert_eq!(
+        entry_name_color(&ordinary, theme.palette),
+        rgb(0x44, 0x55, 0x66)
+    );
+
+    let class_default = theme.resolve(Path::new("main.py"), EntryKind::File);
+    assert_eq!(class_default.name_color, Some(rgb(0x22, 0x33, 0x44)));
+
+    let exact = theme.resolve(Path::new("special.rs"), EntryKind::File);
+    assert_eq!(exact.name_color, Some(rgb(0x55, 0x66, 0x77)));
+    assert_eq!(
+        entry_name_color(&exact, theme.palette),
+        rgb(0x55, 0x66, 0x77)
+    );
+}
+
+#[test]
+fn colored_names_uses_icon_color_only_when_no_name_color_is_configured() {
+    let colored = Theme::from_config_str(
+        r##"
+[palette]
+colored_names = true
+
+[classes.code]
+color = "#112233"
+"##,
+    )
+    .expect("theme should parse");
+    let colored_entry = colored.resolve(Path::new("main.rs"), EntryKind::File);
+    assert_eq!(colored_entry.name_color, None);
+    assert_eq!(
+        entry_name_color(&colored_entry, colored.palette),
+        colored_entry.color
+    );
+
+    let default_names = Theme::default_theme();
+    let default_entry = default_names.resolve(Path::new("main.rs"), EntryKind::File);
+    assert_eq!(
+        entry_name_color(&default_entry, default_names.palette),
+        default_names.palette.text
+    );
+}
+
+#[test]
+fn focused_entry_style_defaults_and_overrides_independent_modifiers() {
+    let default_theme = Theme::default_theme();
+    assert!(default_theme.focused_entry.bold);
+    assert!(!default_theme.focused_entry.italic);
+    assert!(!default_theme.focused_entry.underline);
+
+    let theme = Theme::from_config_str(
+        r#"
+[focused_entry]
+bold = false
+italic = true
+underline = true
+"#,
+    )
+    .expect("theme should parse focused entry overrides");
+
+    assert!(!theme.focused_entry.bold);
+    assert!(theme.focused_entry.italic);
+    assert!(theme.focused_entry.underline);
+    assert_eq!(
+        theme.focused_entry.modifiers(),
+        Modifier::ITALIC | Modifier::UNDERLINED
+    );
+}
+
+#[test]
+fn symlink_directory_name_color_inherits_directory_unless_overridden() {
+    let inherited = Theme::from_config_str(
+        r##"
+[classes.directory]
+name_color = "#112233"
+"##,
+    )
+    .expect("theme should parse");
+    let inherited_link = inherited.resolve_with_builtin_class(
+        Path::new("linked"),
+        EntryKind::Directory,
+        FileClass::SymlinkDirectory,
+    );
+    assert_eq!(inherited_link.name_color, Some(rgb(0x11, 0x22, 0x33)));
+
+    let overridden = Theme::from_config_str(
+        r##"
+[classes.directory]
+name_color = "#112233"
+
+[classes.symlink_directory]
+name_color = "#445566"
+"##,
+    )
+    .expect("theme should parse");
+    let overridden_link = overridden.resolve_with_builtin_class(
+        Path::new("linked"),
+        EntryKind::Directory,
+        FileClass::SymlinkDirectory,
+    );
+    assert_eq!(overridden_link.name_color, Some(rgb(0x44, 0x55, 0x66)));
 }
 
 #[test]

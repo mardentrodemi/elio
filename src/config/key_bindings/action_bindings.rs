@@ -83,6 +83,7 @@ pub(crate) enum NamedKey {
     BackTab,
     Backspace,
     Delete,
+    Insert,
     PageUp,
     PageDown,
     Home,
@@ -105,6 +106,7 @@ impl NamedKey {
             "backtab" => Some(Self::BackTab),
             "backspace" => Some(Self::Backspace),
             "delete" | "del" => Some(Self::Delete),
+            "insert" | "ins" => Some(Self::Insert),
             "pageup" => Some(Self::PageUp),
             "pagedown" => Some(Self::PageDown),
             "home" => Some(Self::Home),
@@ -130,6 +132,7 @@ impl NamedKey {
             | (Self::BackTab, KeyCode::BackTab)
             | (Self::Backspace, KeyCode::Backspace)
             | (Self::Delete, KeyCode::Delete)
+            | (Self::Insert, KeyCode::Insert)
             | (Self::PageUp, KeyCode::PageUp)
             | (Self::PageDown, KeyCode::PageDown)
             | (Self::Home, KeyCode::Home)
@@ -153,6 +156,7 @@ impl std::fmt::Display for NamedKey {
             Self::BackTab => "Shift+Tab",
             Self::Backspace => "Backspace",
             Self::Delete => "Del",
+            Self::Insert => "Insert",
             Self::PageUp => "PageUp",
             Self::PageDown => "PageDown",
             Self::Home => "Home",
@@ -462,8 +466,8 @@ impl PartialEq<char> for KeyList {
 /// Empty lists unbind the action (`open = []`).
 /// Character bindings must be one character; named bindings currently support
 /// `left`, `right`, `up`, `down`, `enter`, `space`, `tab`, `backtab`,
-/// `shift+tab`, `backspace`, `delete`, `del`, `pageup`, `pagedown`, `home`,
-/// `end`, and `f1`..`f12`.
+/// `shift+tab`, `backspace`, `delete`, `del`, `insert`, `ins`, `pageup`,
+/// `pagedown`, `home`, `end`, and `f1`..`f12`.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub(crate) struct KeyBindings {
     pub choose: KeyList,

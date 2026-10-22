@@ -17,6 +17,7 @@ const ENTRY_CLASS_CACHE_LIMIT: usize = 4_096;
 pub(super) struct ClassStyle {
     pub(super) icon: String,
     pub(super) color: Color,
+    pub(super) name_color: Option<Color>,
 }
 
 #[derive(Clone, Default)]
@@ -24,6 +25,7 @@ pub(super) struct RuleOverride {
     pub(super) class: Option<FileClass>,
     pub(super) icon: Option<String>,
     pub(super) color: Option<Color>,
+    pub(super) name_color: Option<Color>,
 }
 
 pub(crate) struct ResolvedAppearance<'a> {
@@ -31,6 +33,7 @@ pub(crate) struct ResolvedAppearance<'a> {
     pub class: FileClass,
     pub icon: &'a str,
     pub color: Color,
+    pub name_color: Option<Color>,
 }
 
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
@@ -72,24 +75,17 @@ pub(crate) fn resolve_browser_entry(entry: &Entry) -> ResolvedAppearance<'static
     active_theme().resolve_with_builtin_class(&entry.path, entry.kind, builtin_class)
 }
 
-pub(crate) fn mix_color(base: Color, tint: Color, tint_weight: u8) -> Color {
-    match (base, tint) {
-        (Color::Rgb(br, bg, bb), Color::Rgb(tr, tg, tb)) => {
-            let weight = u16::from(tint_weight);
-            let base_weight = 255 - weight;
-            Color::Rgb(
-                ((u16::from(br) * base_weight + u16::from(tr) * weight) / 255) as u8,
-                ((u16::from(bg) * base_weight + u16::from(tg) * weight) / 255) as u8,
-                ((u16::from(bb) * base_weight + u16::from(tb) * weight) / 255) as u8,
-            )
-        }
-        _ => base,
-    }
-}
-
 pub(crate) fn entry_color(entry: &Entry, palette: Palette) -> Color {
     let _ = palette;
     resolve_entry(entry).color
+}
+
+pub(crate) fn entry_name_color(appearance: &ResolvedAppearance<'_>, palette: Palette) -> Color {
+    appearance.name_color.unwrap_or(if palette.colored_names {
+        appearance.color
+    } else {
+        palette.text
+    })
 }
 
 pub(crate) fn entry_symbol(entry: &Entry) -> &'static str {
@@ -265,12 +261,25 @@ impl Theme {
                 })
                 .unwrap_or(base.color)
         };
+        let name_color = if prefer_builtin_symlink {
+            base.name_color
+        } else {
+            exact_rule
+                .and_then(|rule| rule.name_color)
+                .or_else(|| {
+                    (!prefer_builtin_license)
+                        .then(|| ext_rule.and_then(|rule| rule.name_color))
+                        .flatten()
+                })
+                .or(base.name_color)
+        };
 
         ResolvedAppearance {
             #[cfg(test)]
             class,
             icon,
             color,
+            name_color,
         }
     }
 }

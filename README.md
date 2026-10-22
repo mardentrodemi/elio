@@ -4,7 +4,7 @@ A dual-pane fork of [Elio](https://github.com/elio-fm/elio), the terminal file m
 
 ## Description
 
-This repository is a fork of Elio that adds a second file pane and folder pins in Places. The second pane opens in the preview column, so two directories can stay visible and usable at the same time. Closing it restores the preview.
+This repository is a fork of Elio 1.14.0 that adds a second file pane and folder pins in Places. The second pane opens in the preview column, so two directories can stay visible and usable at the same time. Closing it restores the preview.
 
 Navigation, file operations, previews, themes, and the rest of Elio behave as in the upstream project. Upstream documentation remains the reference for those features: [elio-fm.github.io/docs](https://elio-fm.github.io/docs/).
 

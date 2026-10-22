@@ -4,6 +4,7 @@ use crate::{
     terminal_runtime::tui_drawing::AppTerminal, theme,
 };
 use anyhow::Result;
+use crossterm::terminal;
 use std::{
     io::Write,
     path::{Path, PathBuf},
@@ -44,6 +45,7 @@ impl PendingDropIn {
 struct DragIconLabel {
     icon: String,
     text: String,
+    is_item_count: bool,
     icon_color: ratatui::style::Color,
 }
 
@@ -54,6 +56,18 @@ pub(in crate::terminal_runtime) fn handle_event(
     pending_drag_out: &mut PendingDragOut,
     pending_drop_in: &mut PendingDropIn,
 ) -> Result<()> {
+    if app.blocks_file_drag_and_drop()
+        && reject_event_while_overlay_open(
+            terminal,
+            app,
+            &event,
+            pending_drag_out,
+            pending_drop_in,
+        )?
+    {
+        return Ok(());
+    }
+
     match event {
         KittyDndEvent::DropOffer {
             mime_index,
@@ -201,6 +215,68 @@ pub(in crate::terminal_runtime) fn handle_event(
     Ok(())
 }
 
+pub(in crate::terminal_runtime) fn cancel_active_drag_for_overlay<W: Write>(
+    writer: &mut W,
+    app: &mut App,
+    pending_drag_out: &mut PendingDragOut,
+) -> Result<bool> {
+    if !pending_drag_out.active || !app.blocks_file_drag_and_drop() {
+        return Ok(false);
+    }
+
+    pending_drag_out.reset();
+    app.clear_drag_state();
+    writer.write_all(cancel_drag_sequence().as_bytes())?;
+    writer.flush()?;
+    Ok(true)
+}
+
+fn reject_event_while_overlay_open(
+    terminal: &mut AppTerminal,
+    app: &mut App,
+    event: &KittyDndEvent,
+    pending_drag_out: &mut PendingDragOut,
+    pending_drop_in: &mut PendingDropIn,
+) -> Result<bool> {
+    let mut sequence = match event {
+        KittyDndEvent::DropOffer { final_drop, .. } => {
+            pending_drop_in.reset();
+            if *final_drop {
+                finish_drop_sequence(DropFinish::Reject).to_string()
+            } else {
+                reject_drop_sequence().to_string()
+            }
+        }
+        KittyDndEvent::DropData { .. } | KittyDndEvent::DropDataError { .. } => {
+            pending_drop_in.reset();
+            finish_drop_sequence(DropFinish::Reject).to_string()
+        }
+        KittyDndEvent::DropUnsupported { final_drop } => {
+            pending_drop_in.reset();
+            if *final_drop {
+                finish_drop_sequence(DropFinish::Reject).to_string()
+            } else {
+                reject_drop_sequence().to_string()
+            }
+        }
+        KittyDndEvent::DragOffer { .. } | KittyDndEvent::DragDataRequested { .. } => {
+            pending_drop_in.reset();
+            app.clear_drag_state();
+            cancel_drag_sequence().to_string()
+        }
+        _ => return Ok(false),
+    };
+
+    if pending_drag_out.active {
+        pending_drag_out.reset();
+        app.clear_drag_state();
+        sequence.push_str(cancel_drag_sequence());
+    }
+    terminal.backend_mut().write_all(sequence.as_bytes())?;
+    terminal.backend_mut().flush()?;
+    Ok(true)
+}
+
 fn unsupported_drop_scheme_status(schemes: &[String]) -> String {
     match schemes {
         [] => "Drop contains no local files".to_string(),
@@ -230,14 +306,25 @@ fn clip_op_to_drop_finish(op: ClipOp) -> DropFinish {
     }
 }
 
+fn drag_card_cell_height() -> Option<f32> {
+    let size = terminal::window_size().ok()?;
+    drag_card_cell_height_from_dimensions(size.height, size.rows)
+}
+
+fn drag_card_cell_height_from_dimensions(pixels_height: u16, rows: u16) -> Option<f32> {
+    (pixels_height > 0 && rows > 0).then(|| f32::from(pixels_height) / f32::from(rows))
+}
+
 fn drag_icon_sequence(label: &DragIconLabel) -> String {
     let palette = theme::palette();
     if let Some(image) = render_drag_image(
         &label.icon,
         &label.text,
+        label.is_item_count,
         label.icon_color,
         palette.elevated,
         palette.text,
+        drag_card_cell_height(),
     ) {
         return present_drag_icon_png_sequence(image.width, image.height, &image.png);
     }
@@ -272,6 +359,7 @@ where
             return DragIconLabel {
                 icon,
                 text: truncate_drag_label_text(&text, MAX_LABEL_CHARS),
+                is_item_count: false,
                 icon_color,
             };
         }
@@ -284,6 +372,7 @@ where
     DragIconLabel {
         icon: icon.0,
         text,
+        is_item_count: true,
         icon_color: icon.1,
     }
 }

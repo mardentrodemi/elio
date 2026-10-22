@@ -11,7 +11,7 @@ use crate::theme::{self, Palette};
 use ratatui::{
     Frame,
     layout::{Alignment, Constraint, Direction, Layout, Margin, Rect},
-    style::{Modifier, Style},
+    style::{Color, Modifier, Style},
     text::{Line, Span},
     widgets::{Block, BorderType, Borders, Paragraph},
 };
@@ -308,7 +308,7 @@ fn render_list_view(
                         Span::styled(
                             helpers::clamp_label(&entry.name, row.width.saturating_sub(8) as usize),
                             Style::default()
-                                .fg(palette.text)
+                                .fg(theme::entry_name_color(&appearance, palette))
                                 .add_modifier(Modifier::BOLD),
                         ),
                     ]),
@@ -396,15 +396,12 @@ fn render_compact_list_row_in(
     let icon_style = Style::default()
         .fg(appearance.color)
         .add_modifier(Modifier::BOLD);
-    let name_style = if selected {
-        Style::default()
-            .fg(palette.text)
-            .add_modifier(Modifier::BOLD)
-    } else if clip_op == Some(ClipOp::Cut) {
-        Style::default().fg(palette.muted)
+    let name_color = theme::entry_name_color(&appearance, palette);
+    let name_style = Style::default().fg(name_color).add_modifier(if selected {
+        theme::focused_entry_style().modifiers()
     } else {
-        Style::default().fg(palette.text)
-    };
+        Modifier::empty()
+    });
     let muted_style = Style::default().fg(palette.muted);
     let available_width = row_width.saturating_sub(COMPACT_PREFIX_WIDTH as u16).max(1) as usize;
     let min_name_width = available_width.min(COMPACT_NAME_MIN_WIDTH);
@@ -505,7 +502,7 @@ fn render_compact_list_row_in(
     Line::from(spans)
 }
 
-fn compact_entry_name_spans(
+pub(super) fn compact_entry_name_spans(
     entry: &Entry,
     width: usize,
     symlink_target: Option<&str>,
@@ -520,10 +517,12 @@ fn compact_entry_name_spans(
         return compact_symlink_name_spans(&entry.name, &suffix, width, name_style, muted_style);
     }
 
-    vec![Span::styled(
-        pad_right(helpers::clamp_label(&entry.name, width), width),
-        name_style,
-    )]
+    let label = helpers::clamp_label(&entry.name, width);
+    let padding = width.saturating_sub(helpers::display_width(&label));
+    vec![
+        Span::styled(label, name_style),
+        Span::raw(" ".repeat(padding)),
+    ]
 }
 
 fn compact_symlink_name_spans(
@@ -540,13 +539,12 @@ fn compact_symlink_name_spans(
     let suffix = sanitize_terminal_text(suffix);
 
     if width < MIN_NAME_WIDTH + MIN_SUFFIX_WIDTH {
-        return vec![Span::styled(
-            pad_right(
-                helpers::truncate_middle(&format!("{name}{suffix}"), width),
-                width,
-            ),
-            name_style,
-        )];
+        let label = helpers::truncate_middle(&format!("{name}{suffix}"), width);
+        let padding = width.saturating_sub(helpers::display_width(&label));
+        return vec![
+            Span::styled(label, name_style),
+            Span::raw(" ".repeat(padding)),
+        ];
     }
 
     let name_width = helpers::display_width(&name);
@@ -846,6 +844,22 @@ struct TileState {
     clip_op: Option<ClipOp>,
 }
 
+pub(super) fn focused_tile_content_bg(focused_bg: Color) -> Color {
+    const DARKEN_WEIGHT: u16 = 32;
+
+    match focused_bg {
+        Color::Rgb(red, green, blue) => {
+            let remaining = 255 - DARKEN_WEIGHT;
+            Color::Rgb(
+                (u16::from(red) * remaining / 255) as u8,
+                (u16::from(green) * remaining / 255) as u8,
+                (u16::from(blue) * remaining / 255) as u8,
+            )
+        }
+        _ => focused_bg,
+    }
+}
+
 fn render_tile(
     frame: &mut Frame<'_>,
     rect: Rect,
@@ -863,26 +877,34 @@ fn render_tile(
     let appearance = theme::resolve_browser_entry(entry);
     let icon_color = appearance.color;
     let background = palette.surface;
+    // Marked entries keep the filled tile from the dual-pane fork. Focus still
+    // uses the 1.14 background, and the indicator bar distinguishes the two.
     let content_bg = if selected || multi_selected {
-        theme::mix_color(palette.selected_bg, icon_color, 22)
+        focused_tile_content_bg(palette.selected_bg)
     } else {
         palette.surface
     };
-    // Band background carries the clipboard/selection state.  The cursor position
-    // (selected) is already communicated by the content background tint and does
-    // not change the band so tiles stay visually consistent while navigating.
-    let band_bg = if clip_op == Some(ClipOp::Yank) {
-        palette.grid_yank_band
+    // The full-height indicator distinguishes focus or a marked/clipboard state,
+    // while a marked/clipboard color takes priority when states overlap.
+    let indicator_color = if clip_op == Some(ClipOp::Yank) {
+        Some(palette.yank_bar)
     } else if clip_op == Some(ClipOp::Cut) {
-        palette.grid_cut_band
+        Some(palette.cut_bar)
     } else if multi_selected {
-        palette.grid_selection_band
+        Some(palette.selection_bar)
+    } else if selected {
+        Some(palette.selected_border)
+    } else {
+        None
+    };
+    let band_bg = if selected || multi_selected {
+        palette.selected_bg
     } else {
         palette.elevated
     };
     let band_fg = palette.text;
     let band_icon = icon_color;
-    let band_name_fg = band_fg;
+    let band_name_fg = theme::entry_name_color(&appearance, palette);
 
     frame.render_widget(
         Block::default().style(Style::default().bg(background).fg(palette.text)),
@@ -916,9 +938,11 @@ fn render_tile(
             Span::raw(" "),
             Span::styled(
                 helpers::clamp_label(&entry.name, band.width.saturating_sub(5) as usize),
-                Style::default()
-                    .fg(band_name_fg)
-                    .add_modifier(Modifier::BOLD),
+                Style::default().fg(band_name_fg).add_modifier(if selected {
+                    theme::focused_entry_style().modifiers()
+                } else {
+                    Modifier::empty()
+                }),
             ),
         ]))
         .style(Style::default().bg(band_bg).fg(band_fg)),
@@ -966,6 +990,18 @@ fn render_tile(
         frame.render_widget(
             Paragraph::new(lines).style(Style::default().bg(content_bg).fg(palette.text)),
             content_inner,
+        );
+    }
+    if let Some(indicator_color) = indicator_color {
+        frame.render_widget(
+            Paragraph::new("▌\n".repeat(rect.height as usize))
+                .style(Style::default().fg(indicator_color)),
+            Rect {
+                x: rect.x,
+                y: rect.y,
+                width: 1,
+                height: rect.height,
+            },
         );
     }
 }

@@ -12,6 +12,7 @@ elevated = "#1d1d1d"
 border = "#303030"
 text = "#e7edf5"
 muted = "#8c97a8"
+colored_names = false
 accent = "#7aaeff"
 accent_soft = "#1a2740"
 accent_text = "#eef4ff"
@@ -21,15 +22,18 @@ selection_bar = "#ffb24a"
 yank_bar = "#57c957"
 cut_bar = "#e86060"
 progress_bar = "#41a0dc"
-grid_selection_band = "#34260f"
-grid_yank_band = "#162a16"
-grid_cut_band = "#3c1818"
+
 trash_bar = "#d2415f"
 restore_bar = "#41a0dc"
 sidebar_active = "#1a2a43"
 button_bg = "#131313"
 button_disabled_bg = "#0f0f0f"
 path_bg = "#111111"
+
+[focused_entry]
+bold = true
+italic = false
+underline = false
 
 [preview.code]
 fg = "#d7e3f4"

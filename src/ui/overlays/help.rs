@@ -87,12 +87,9 @@ pub(in crate::ui) fn render_help_overlay(
         keys.action(&kb.scroll_preview_right, "scroll right"),
         keys.action(&kb.toggle_preview, "toggle preview pane"),
         keys.action(&kb.fullscreen_preview, "fullscreen preview"),
-        keys.action(
-            &kb.secondary_browser,
-            "toggle a second file pane in place of preview",
-        ),
-        keys.action(&kb.focus_other_file_pane, "switch focus between file panes"),
-        keys.action(&kb.swap_file_panes, "swap the two file panes"),
+        keys.action(&kb.secondary_browser, "toggle second pane"),
+        keys.action(&kb.focus_other_file_pane, "focus other pane"),
+        keys.action(&kb.swap_file_panes, "swap file panes"),
     ]);
     let mouse_entries = vec![
         e("Click", "select item"),
@@ -136,7 +133,7 @@ pub(in crate::ui) fn render_help_overlay(
     } else {
         area.width.saturating_sub(4).clamp(44, 90)
     };
-    let popup_height = area.height.saturating_sub(2).clamp(9, 37);
+    let popup_height = area.height.saturating_sub(2).clamp(9, 38);
     let popup = helpers::centered_rect(area, popup_width, popup_height);
     state.help_panel = Some(popup);
     frame.render_widget(Clear, popup);
@@ -409,7 +406,7 @@ fn navigation_entries(keys: &HelpKeys<'_>) -> Vec<HelpEntry> {
             "cycle places",
         ),
         keys.pair_action(&kb.history_back, &kb.history_forward, "back / forward"),
-        keys.action(&kb.toggle_place_tab, "pin or unpin this folder in Places"),
+        keys.action(&kb.toggle_place_tab, "pin or unpin folder"),
     ]);
     entries(items)
 }
@@ -486,10 +483,7 @@ fn help_column_lines(width: u16, sections: &[HelpSection], palette: Palette) -> 
     let action_width = content_width.saturating_sub(key_width + gap_width).max(1);
 
     let mut lines = Vec::new();
-    for (i, section) in sections.iter().enumerate() {
-        if i > 0 {
-            lines.push(Line::default());
-        }
+    for section in sections {
         lines.push(help_section_title(section.title, palette));
         for entry in &section.entries {
             lines.extend(help_entry_lines(entry, key_width, action_width, palette));

@@ -1,6 +1,8 @@
-use super::super::file_browser_pane::render_compact_list_row;
 #[cfg(unix)]
 use super::super::file_browser_pane::symlink_target_detail;
+use super::super::file_browser_pane::{
+    compact_entry_name_spans, focused_tile_content_bg, render_compact_list_row,
+};
 use super::super::helpers;
 use super::super::pane_layout::resolve_pane_layout;
 use super::super::places_pane::render_places_pane;
@@ -12,7 +14,13 @@ use crate::preview::default_code_preview_line_limit;
 use crate::theme;
 use crate::ui;
 use crossterm::event::{Event, KeyCode, KeyEvent};
-use ratatui::{Terminal, backend::TestBackend, buffer::Buffer, layout::Rect};
+use ratatui::{
+    Terminal,
+    backend::TestBackend,
+    buffer::Buffer,
+    layout::Rect,
+    style::{Modifier, Style},
+};
 use std::{
     fs,
     path::PathBuf,
@@ -859,6 +867,96 @@ fn grid_view_keeps_entry_hits_inside_the_entries_panel() {
 }
 
 #[test]
+fn grid_view_only_bolds_the_focused_entry_name() {
+    let root = temp_path("grid-focused-name-weight");
+    fs::create_dir_all(&root).expect("failed to create temp root");
+    fs::write(root.join("focused.txt"), "focused\n").expect("failed to create focused file");
+    fs::write(root.join("other.txt"), "other\n").expect("failed to create other file");
+
+    let mut app = App::new_at(root.clone()).expect("app should load temp directory");
+    app.file_browser.view_mode = crate::file_browser::ViewMode::Grid;
+    let focused_index = app.file_browser.selected;
+    let other_index = app
+        .file_browser
+        .entries
+        .iter()
+        .position(|entry| entry.name == "other.txt")
+        .expect("other entry should be present");
+    let mut terminal = Terminal::new(TestBackend::new(140, 30)).expect("terminal should init");
+
+    let state = draw_ui(&mut terminal, &mut app);
+    let buffer = terminal.backend().buffer();
+    let name_is_bold = |entry_index: usize, first_char: &str| {
+        let rect = state.entry_hits[entry_index].rect;
+        let x = (rect.x..rect.x.saturating_add(rect.width))
+            .find(|&x| buffer[(x, rect.y)].symbol() == first_char)
+            .expect("entry name should be rendered in its tile");
+        buffer[(x, rect.y)]
+            .modifier
+            .contains(ratatui::style::Modifier::BOLD)
+    };
+
+    assert!(name_is_bold(focused_index, "f"));
+    assert!(!name_is_bold(other_index, "o"));
+
+    fs::remove_dir_all(root).expect("failed to remove temp root");
+}
+
+#[test]
+fn grid_view_uses_focus_background_for_the_entire_tile() {
+    let root = temp_path("grid-focused-tile");
+    fs::create_dir_all(&root).expect("failed to create temp root");
+    fs::write(root.join("focused.txt"), "focused\n").expect("failed to create focused file");
+
+    let mut app = App::new_at(root.clone()).expect("app should load temp directory");
+    app.file_browser.view_mode = crate::file_browser::ViewMode::Grid;
+    let focused_index = app.file_browser.selected;
+    let mut terminal = Terminal::new(TestBackend::new(140, 30)).expect("terminal should init");
+
+    let state = draw_ui(&mut terminal, &mut app);
+    let rect = state.entry_hits[focused_index].rect;
+    let buffer = terminal.backend().buffer();
+
+    assert_eq!(buffer[(rect.x, rect.y)].bg, theme::palette().selected_bg);
+    for y in rect.y..rect.y.saturating_add(rect.height) {
+        assert_eq!(buffer[(rect.x, y)].symbol(), "▌");
+        assert_eq!(buffer[(rect.x, y)].fg, theme::palette().selected_border);
+    }
+    assert_eq!(
+        buffer[(rect.x, rect.y.saturating_add(1))].bg,
+        focused_tile_content_bg(theme::palette().selected_bg)
+    );
+
+    fs::remove_dir_all(root).expect("failed to remove temp root");
+}
+
+#[test]
+fn grid_view_marks_space_selected_entry_with_a_full_height_indicator() {
+    let root = temp_path("grid-focus-and-selection");
+    fs::create_dir_all(&root).expect("failed to create temp root");
+    fs::write(root.join("focused.txt"), "focused\n").expect("failed to create focused file");
+
+    let mut app = App::new_at(root.clone()).expect("app should load temp directory");
+    app.file_browser.view_mode = crate::file_browser::ViewMode::Grid;
+    app.handle_event(Event::Key(KeyEvent::from(KeyCode::Char(' '))))
+        .expect("space selection should succeed");
+    let focused_index = app.file_browser.selected;
+    let mut terminal = Terminal::new(TestBackend::new(140, 30)).expect("terminal should init");
+
+    let state = draw_ui(&mut terminal, &mut app);
+    let rect = state.entry_hits[focused_index].rect;
+    let buffer = terminal.backend().buffer();
+
+    assert_eq!(buffer[(rect.x, rect.y)].bg, theme::palette().selected_bg);
+    for y in rect.y..rect.y.saturating_add(rect.height) {
+        assert_eq!(buffer[(rect.x, y)].symbol(), "▌");
+        assert_eq!(buffer[(rect.x, y)].fg, theme::palette().selection_bar);
+    }
+
+    fs::remove_dir_all(root).expect("failed to remove temp root");
+}
+
+#[test]
 fn preview_title_row_is_cleared_when_switching_to_shorter_names() {
     let root = temp_path("preview-title");
     fs::create_dir_all(&root).expect("failed to create temp root");
@@ -1078,6 +1176,98 @@ fn visible_directory_rows_show_cached_item_counts() {
     assert!(
         rendered.contains("2 items"),
         "expected visible directory rows to show cached item counts, got: {rendered:?}"
+    );
+
+    fs::remove_dir_all(root).expect("failed to remove temp root");
+}
+
+#[test]
+fn compact_entry_name_padding_does_not_inherit_underlining() {
+    let root = temp_path("underlined-compact-name-padding");
+    fs::create_dir_all(&root).expect("failed to create temp root");
+    fs::write(root.join("src"), "").expect("failed to create entry");
+
+    let app = App::new_at(root.clone()).expect("app should load temp directory");
+    let entry = app
+        .file_browser
+        .entries
+        .iter()
+        .find(|entry| entry.name == "src")
+        .expect("entry should be present");
+    let spans = compact_entry_name_spans(
+        entry,
+        20,
+        None,
+        false,
+        Style::default().add_modifier(Modifier::UNDERLINED),
+        Style::default(),
+    );
+
+    assert_eq!(spans[0].content, "src");
+    assert!(spans[0].style.add_modifier.contains(Modifier::UNDERLINED));
+    assert_eq!(spans[1].content, " ".repeat(17));
+    assert!(!spans[1].style.add_modifier.contains(Modifier::UNDERLINED));
+
+    fs::remove_dir_all(root).expect("failed to remove temp root");
+}
+
+#[test]
+fn compact_list_rows_use_resolved_icon_colors_for_names_when_enabled() {
+    let root = temp_path("colored-compact-list-name");
+    fs::create_dir_all(&root).expect("failed to create temp root");
+    fs::write(root.join("main.rs"), "fn main() {}\n").expect("failed to create Rust file");
+
+    let app = App::new_at(root.clone()).expect("app should load temp directory");
+    let entry = app
+        .file_browser
+        .entries
+        .iter()
+        .find(|entry| entry.name == "main.rs")
+        .expect("Rust file should be present");
+    let appearance = theme::resolve_browser_entry(entry);
+    let mut palette = theme::palette();
+    palette.colored_names = true;
+    let line = render_compact_list_row(&app, entry, false, 80, palette);
+    let name = line
+        .spans
+        .iter()
+        .find(|span| span.content.trim_end() == entry.name)
+        .expect("compact row should contain the entry name");
+
+    assert_eq!(name.style.fg, Some(appearance.color));
+
+    fs::remove_dir_all(root).expect("failed to remove temp root");
+}
+
+#[test]
+fn selected_cut_compact_list_rows_keep_resolved_name_colors_and_bold() {
+    let root = temp_path("selected-cut-compact-list-name");
+    fs::create_dir_all(&root).expect("failed to create temp root");
+    fs::write(root.join("main.rs"), "fn main() {}\n").expect("failed to create Rust file");
+
+    let mut app = App::new_at(root.clone()).expect("app should load temp directory");
+    app.cut();
+    let entry = app
+        .file_browser
+        .entries
+        .iter()
+        .find(|entry| entry.name == "main.rs")
+        .expect("Rust file should be present");
+    let appearance = theme::resolve_browser_entry(entry);
+    let mut palette = theme::palette();
+    palette.colored_names = true;
+    let line = render_compact_list_row(&app, entry, true, 80, palette);
+    let name = line
+        .spans
+        .iter()
+        .find(|span| span.content.trim_end() == entry.name)
+        .expect("compact row should contain the entry name");
+
+    assert_eq!(name.style.fg, Some(appearance.color));
+    assert!(
+        name.style
+            .add_modifier
+            .contains(ratatui::style::Modifier::BOLD)
     );
 
     fs::remove_dir_all(root).expect("failed to remove temp root");

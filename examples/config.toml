@@ -13,8 +13,8 @@
 
 # Terminal used by elio's file chooser portal.
 # `elio portal enable` detects and sets this automatically when possible.
-# Supported values: kitty, ghostty, foot, wezterm, alacritty, rio, konsole,
-# gnome-terminal, xterm.
+# Supported values: kitty, ghostty, foot, footclient, wezterm, alacritty, rio,
+# konsole, gnome-terminal, xterm.
 #
 # [portal]
 # terminal = "kitty"
@@ -56,7 +56,7 @@
 # - "downloads"
 # - { builtin = "downloads", key = "D" }
 # - { title = "tmp", path = "/tmp", key = "T" }
-# - { title = "Repo root", command = "git rev-parse --show-toplevel", key = "R" }
+# - { title = "repo root", command = "git rev-parse --show-toplevel", key = "r" }
 #
 # Custom entries use either `path` or `command`. Commands run in the current
 # directory and must print an absolute destination path.
@@ -71,7 +71,7 @@
 #   "config",
 #   "trash",
 #   { title = "tmp", path = "/tmp", key = "T" },
-#   { title = "Repo root", command = "git rev-parse --show-toplevel", key = "R" },
+#   { title = "repo root", command = "git rev-parse --show-toplevel", key = "r" },
 # ]
 #
 # Override elio's open action without changing system defaults. Rules are
@@ -121,8 +121,8 @@
 #
 # Keys may be one-character strings, named keys, or modifier bindings.
 # Supported named keys: "left", "right", "up", "down", "enter", "space",
-# "tab", "backtab", "shift+tab", "backspace", "delete", "del", "pageup",
-# "pagedown", "home", "end", "f1".."f12".
+# "tab", "backtab", "shift+tab", "backspace", "delete", "del", "insert",
+# "ins", "pageup", "pagedown", "home", "end", "f1".."f12".
 # Named keys and modifiers are case-insensitive: "F2", "PageUp", "Ctrl+O".
 #
 # Examples: open_with = ["O", "w"], open = "ctrl+o", nav_right = "shift+right".

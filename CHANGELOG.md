@@ -7,14 +7,37 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.14.0] - 2026-10-19
+
 ### Added
 
 - Added support for using commands to provide destination paths for custom Go To entries. ([#315])
+- Added `theme.toml` options to color entry names globally (`[palette] colored_names`) or per rule (`name_color`). ([#327])
+- Added `[focused_entry]` theme options for bold, italic, and underline styles for focused entry names. ([#328])
+- Added FileChooser portal support for `footclient` via manual configuration. ([#322])
+- Added HEIC and HEIF image previews when ffmpeg is available. ([#338], [#351])
+- Added shell integration for PowerShell.
+- Added support for the `Insert` key in `[keys]` bindings, with `ins` as an alias. ([#349])
+
+### Changed
+
+- Reworked grid view styling to align it with list view and improve focus clarity in transparent themes. Grid view now shares list view's selection, yank, and cut indicator colors; the `grid_*_band` palette keys are no longer used.
+- Made grid entry names bold only when focused, matching list view.
+- Changed the Save As overwrite confirmation to match the permanent-delete dialog.
+- Made Kitty drag cards track terminal text size, keeping them consistent across displays and font sizes.
+- Made Kitty drag card labels bold to match focused item names.
+- Improved Kitty drag card icon and label spacing.
 
 ### Fixed
 
 - Fixed text input fields ignoring Caps Lock. ([#321])
 - Fixed Ghostty showing configuration errors when opening the FileChooser portal. ([#324])
+- Fixed the FileChooser portal failing after elio is updated or otherwise replaced while its portal service is running. ([#342])
+- Fixed Save As not closing when clicking outside its popup.
+- Fixed overlays not blocking drag and drop.
+- Fixed UI lag in Duplicate Finder when navigating past large image previews.
+- Fixed brief UI stalls while loading large PNG previews in terminals using the Kitty Graphics Protocol.
+- Fixed archive extraction nesting a single root item in an extra directory. ([#352])
 
 ## [1.13.0] - 2026-10-07
 
@@ -358,7 +381,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Trash and restore support for safer file management workflows.
 - Optional external-tool integrations such as Poppler, ffmpeg, ffprobe, resvg, and 7-Zip for richer previews and metadata.
 
-[Unreleased]: https://github.com/elio-fm/elio/compare/v1.13.0...HEAD
+[Unreleased]: https://github.com/elio-fm/elio/compare/v1.14.0...HEAD
+[1.14.0]: https://github.com/elio-fm/elio/compare/v1.13.0...v1.14.0
 [1.13.0]: https://github.com/elio-fm/elio/compare/v1.12.0...v1.13.0
 [1.12.0]: https://github.com/elio-fm/elio/compare/v1.11.2...v1.12.0
 [1.11.2]: https://github.com/elio-fm/elio/compare/v1.11.1...v1.11.2
@@ -377,7 +401,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 [1.1.0]: https://github.com/elio-fm/elio/compare/v1.0.1...v1.1.0
 [1.0.1]: https://github.com/elio-fm/elio/compare/v1.0.0...v1.0.1
 [1.0.0]: https://github.com/elio-fm/elio/releases/tag/v1.0.0
+[#352]: https://github.com/elio-fm/elio/issues/352
+[#351]: https://github.com/elio-fm/elio/issues/351
+[#349]: https://github.com/elio-fm/elio/issues/349
+[#342]: https://github.com/elio-fm/elio/issues/342
+[#338]: https://github.com/elio-fm/elio/issues/338
+[#327]: https://github.com/elio-fm/elio/issues/327
 [#324]: https://github.com/elio-fm/elio/issues/324
+[#322]: https://github.com/elio-fm/elio/issues/322
 [#321]: https://github.com/elio-fm/elio/issues/321
 [#315]: https://github.com/elio-fm/elio/issues/315
 [#314]: https://github.com/elio-fm/elio/issues/314

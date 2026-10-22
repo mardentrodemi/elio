@@ -1,6 +1,6 @@
 use super::item_styling::{ClassStyle, RuleOverride};
 use crate::{config, file_classification::FileClass};
-use ratatui::style::Color;
+use ratatui::style::{Color, Modifier};
 use serde::Deserialize;
 use std::{
     collections::HashMap,
@@ -29,6 +29,7 @@ pub(crate) struct Palette {
     pub border: Color,
     pub text: Color,
     pub muted: Color,
+    pub colored_names: bool,
     pub accent: Color,
     pub accent_soft: Color,
     pub accent_text: Color,
@@ -38,15 +39,35 @@ pub(crate) struct Palette {
     pub yank_bar: Color,
     pub cut_bar: Color,
     pub progress_bar: Color,
-    pub grid_selection_band: Color,
-    pub grid_yank_band: Color,
-    pub grid_cut_band: Color,
     pub trash_bar: Color,
     pub restore_bar: Color,
     pub sidebar_active: Color,
     pub button_bg: Color,
     pub button_disabled_bg: Color,
     pub path_bg: Color,
+}
+
+#[derive(Clone, Copy)]
+pub(crate) struct FocusedEntryStyle {
+    pub bold: bool,
+    pub italic: bool,
+    pub underline: bool,
+}
+
+impl FocusedEntryStyle {
+    pub(crate) fn modifiers(self) -> Modifier {
+        let mut modifiers = Modifier::empty();
+        if self.bold {
+            modifiers |= Modifier::BOLD;
+        }
+        if self.italic {
+            modifiers |= Modifier::ITALIC;
+        }
+        if self.underline {
+            modifiers |= Modifier::UNDERLINED;
+        }
+        modifiers
+    }
 }
 
 #[derive(Clone, Copy)]
@@ -79,6 +100,7 @@ pub(super) struct PreviewTheme {
 #[derive(Clone)]
 pub(super) struct Theme {
     pub(super) palette: Palette,
+    pub(super) focused_entry: FocusedEntryStyle,
     pub(super) preview: PreviewTheme,
     pub(super) classes: HashMap<FileClass, ClassStyle>,
     pub(super) extensions: HashMap<String, RuleOverride>,
@@ -96,6 +118,10 @@ pub(crate) fn initialize(path: Option<&Path>) -> anyhow::Result<()> {
 
 pub(crate) fn palette() -> Palette {
     active_theme().palette
+}
+
+pub(crate) fn focused_entry_style() -> FocusedEntryStyle {
+    active_theme().focused_entry
 }
 
 pub(crate) fn code_preview_palette() -> CodePreviewPalette {
@@ -150,6 +176,7 @@ fn theme_path() -> Option<PathBuf> {
 #[derive(Deserialize, Default)]
 struct ThemeFile {
     palette: Option<PaletteOverride>,
+    focused_entry: Option<FocusedEntryStyleOverride>,
     preview: Option<PreviewOverride>,
     classes: Option<HashMap<String, ClassStyleOverride>>,
     extensions: Option<HashMap<String, RuleOverrideDef>>,
@@ -170,6 +197,7 @@ struct PaletteOverride {
     border: Option<String>,
     text: Option<String>,
     muted: Option<String>,
+    colored_names: Option<bool>,
     accent: Option<String>,
     accent_soft: Option<String>,
     accent_text: Option<String>,
@@ -179,9 +207,6 @@ struct PaletteOverride {
     yank_bar: Option<String>,
     cut_bar: Option<String>,
     progress_bar: Option<String>,
-    grid_selection_band: Option<String>,
-    grid_yank_band: Option<String>,
-    grid_cut_band: Option<String>,
     trash_bar: Option<String>,
     restore_bar: Option<String>,
     sidebar_active: Option<String>,
@@ -193,6 +218,13 @@ struct PaletteOverride {
 #[derive(Deserialize, Default)]
 struct PreviewOverride {
     code: Option<CodePreviewOverride>,
+}
+
+#[derive(Deserialize, Default)]
+struct FocusedEntryStyleOverride {
+    bold: Option<bool>,
+    italic: Option<bool>,
+    underline: Option<bool>,
 }
 
 #[derive(Deserialize, Default)]
@@ -221,6 +253,7 @@ struct CodePreviewOverride {
 struct ClassStyleOverride {
     icon: Option<String>,
     color: Option<String>,
+    name_color: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -231,6 +264,7 @@ enum RuleOverrideDef {
         class: Option<String>,
         icon: Option<String>,
         color: Option<String>,
+        name_color: Option<String>,
     },
 }
 
@@ -257,10 +291,14 @@ impl Theme {
 
     fn apply_overrides(&mut self, parsed: ThemeFile) -> anyhow::Result<()> {
         let mut symlink_directory_color_overridden = false;
+        let mut symlink_directory_name_color_overridden = false;
         let mut broken_symlink_color_overridden = false;
 
         if let Some(palette) = parsed.palette {
             apply_palette_overrides(&mut self.palette, palette)?;
+        }
+        if let Some(focused_entry) = parsed.focused_entry {
+            apply_focused_entry_style_overrides(&mut self.focused_entry, focused_entry);
         }
         if let Some(preview) = parsed.preview {
             apply_preview_overrides(&mut self.preview, preview)?;
@@ -270,7 +308,11 @@ impl Theme {
             for (name, override_style) in classes {
                 let class = parse_class_name(&name)
                     .ok_or_else(|| anyhow::anyhow!("unknown class `{name}`"))?;
-                let ClassStyleOverride { icon, color } = override_style;
+                let ClassStyleOverride {
+                    icon,
+                    color,
+                    name_color,
+                } = override_style;
                 let style = self
                     .classes
                     .get_mut(&class)
@@ -287,10 +329,17 @@ impl Theme {
                     }
                     style.color = parse_color(&color)?;
                 }
+                if let Some(name_color) = name_color {
+                    if class == FileClass::SymlinkDirectory {
+                        symlink_directory_name_color_overridden = true;
+                    }
+                    style.name_color = Some(parse_color(&name_color)?);
+                }
             }
         }
         self.apply_derived_symlink_class_colors(
             symlink_directory_color_overridden,
+            symlink_directory_name_color_overridden,
             broken_symlink_color_overridden,
         );
 
@@ -310,6 +359,7 @@ impl Theme {
     fn apply_derived_symlink_class_colors(
         &mut self,
         symlink_directory_color_overridden: bool,
+        symlink_directory_name_color_overridden: bool,
         broken_symlink_color_overridden: bool,
     ) {
         if !symlink_directory_color_overridden
@@ -320,6 +370,16 @@ impl Theme {
             && let Some(style) = self.classes.get_mut(&FileClass::SymlinkDirectory)
         {
             style.color = color;
+        }
+
+        if !symlink_directory_name_color_overridden
+            && let Some(name_color) = self
+                .classes
+                .get(&FileClass::Directory)
+                .and_then(|style| style.name_color)
+            && let Some(style) = self.classes.get_mut(&FileClass::SymlinkDirectory)
+        {
+            style.name_color = Some(name_color);
         }
 
         let invalid_color = self.preview.code.invalid;
@@ -335,6 +395,8 @@ impl ThemeFile {
     fn into_complete_theme(self) -> anyhow::Result<Theme> {
         Ok(Theme {
             palette: required(self.palette, "palette")?.into_complete_palette()?,
+            focused_entry: required(self.focused_entry, "focused_entry")?
+                .into_complete_focused_entry_style()?,
             preview: required(self.preview, "preview")?.into_complete_preview()?,
             classes: parse_complete_classes(required(self.classes, "classes")?)?,
             extensions: parse_rule_map(required(self.extensions, "extensions")?)?,
@@ -364,6 +426,7 @@ impl PaletteOverride {
             border: color!(border),
             text: color!(text),
             muted: color!(muted),
+            colored_names: required(self.colored_names, "palette.colored_names")?,
             accent: color!(accent),
             accent_soft: color!(accent_soft),
             accent_text: color!(accent_text),
@@ -373,15 +436,22 @@ impl PaletteOverride {
             yank_bar: color!(yank_bar),
             cut_bar: color!(cut_bar),
             progress_bar: color!(progress_bar),
-            grid_selection_band: color!(grid_selection_band),
-            grid_yank_band: color!(grid_yank_band),
-            grid_cut_band: color!(grid_cut_band),
             trash_bar: color!(trash_bar),
             restore_bar: color!(restore_bar),
             sidebar_active: color!(sidebar_active),
             button_bg: color!(button_bg),
             button_disabled_bg: color!(button_disabled_bg),
             path_bg: color!(path_bg),
+        })
+    }
+}
+
+impl FocusedEntryStyleOverride {
+    fn into_complete_focused_entry_style(self) -> anyhow::Result<FocusedEntryStyle> {
+        Ok(FocusedEntryStyle {
+            bold: required(self.bold, "focused_entry.bold")?,
+            italic: required(self.italic, "focused_entry.italic")?,
+            underline: required(self.underline, "focused_entry.underline")?,
         })
     }
 }
@@ -445,6 +515,10 @@ fn parse_complete_classes(
             ClassStyle {
                 icon: required(style.icon, &format!("classes.{name}.icon"))?,
                 color: parse_required_color(style.color, &format!("classes.{name}.color"))?,
+                name_color: style
+                    .name_color
+                    .map(|color| parse_color(&color))
+                    .transpose()?,
             },
         );
     }
@@ -497,6 +571,9 @@ fn apply_palette_overrides(
     apply_palette_color(&mut palette.border, overrides.border)?;
     apply_palette_color(&mut palette.text, overrides.text)?;
     apply_palette_color(&mut palette.muted, overrides.muted)?;
+    if let Some(colored_names) = overrides.colored_names {
+        palette.colored_names = colored_names;
+    }
     apply_palette_color(&mut palette.accent, overrides.accent)?;
     apply_palette_color(&mut palette.accent_soft, overrides.accent_soft)?;
     apply_palette_color(&mut palette.accent_text, overrides.accent_text)?;
@@ -506,12 +583,6 @@ fn apply_palette_overrides(
     apply_palette_color(&mut palette.yank_bar, overrides.yank_bar)?;
     apply_palette_color(&mut palette.cut_bar, overrides.cut_bar)?;
     apply_palette_color(&mut palette.progress_bar, overrides.progress_bar)?;
-    apply_palette_color(
-        &mut palette.grid_selection_band,
-        overrides.grid_selection_band,
-    )?;
-    apply_palette_color(&mut palette.grid_yank_band, overrides.grid_yank_band)?;
-    apply_palette_color(&mut palette.grid_cut_band, overrides.grid_cut_band)?;
     apply_palette_color(&mut palette.trash_bar, overrides.trash_bar)?;
     apply_palette_color(&mut palette.restore_bar, overrides.restore_bar)?;
     apply_palette_color(&mut palette.sidebar_active, overrides.sidebar_active)?;
@@ -522,6 +593,21 @@ fn apply_palette_overrides(
     )?;
     apply_palette_color(&mut palette.path_bg, overrides.path_bg)?;
     Ok(())
+}
+
+fn apply_focused_entry_style_overrides(
+    style: &mut FocusedEntryStyle,
+    overrides: FocusedEntryStyleOverride,
+) {
+    if let Some(bold) = overrides.bold {
+        style.bold = bold;
+    }
+    if let Some(italic) = overrides.italic {
+        style.italic = italic;
+    }
+    if let Some(underline) = overrides.underline {
+        style.underline = underline;
+    }
 }
 
 fn apply_palette_color(target: &mut Color, value: Option<String>) -> anyhow::Result<()> {
@@ -585,7 +671,12 @@ fn parse_rule_override(value: RuleOverrideDef) -> anyhow::Result<RuleOverride> {
             ),
             ..RuleOverride::default()
         }),
-        RuleOverrideDef::Rich { class, icon, color } => Ok(RuleOverride {
+        RuleOverrideDef::Rich {
+            class,
+            icon,
+            color,
+            name_color,
+        } => Ok(RuleOverride {
             class: match class {
                 Some(class) => Some(
                     parse_class_name(&class)
@@ -595,6 +686,10 @@ fn parse_rule_override(value: RuleOverrideDef) -> anyhow::Result<RuleOverride> {
             },
             icon,
             color: match color {
+                Some(color) => Some(parse_color(&color)?),
+                None => None,
+            },
+            name_color: match name_color {
                 Some(color) => Some(parse_color(&color)?),
                 None => None,
             },
