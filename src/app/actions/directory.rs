@@ -112,6 +112,9 @@ impl App {
             .load_token
             .wrapping_add(1);
         load.token = self.file_browser.directory_runtime.load_token;
+        if load.target_cwd != self.file_browser.cwd {
+            self.file_browser.sort_mode = self.folder_sorts.sort_for(&load.target_cwd);
+        }
         let request = jobs::DirectoryRequest {
             token: load.token,
             cwd: load.target_cwd.clone(),

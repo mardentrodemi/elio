@@ -138,7 +138,7 @@ fn configured_folders_first_applies_to_browser_and_directory_previews() {
 }
 
 #[test]
-fn configured_default_sort_initializes_browser_and_retains_runtime_sort() {
+fn configured_default_sort_initializes_browser_and_remembers_sort_per_folder() {
     use crate::filesystem::SortMode;
 
     const SETTING_ENV: &str = "ELIO_TEST_DEFAULT_SORT";
@@ -151,7 +151,7 @@ fn configured_default_sort_initializes_browser_and_retains_runtime_sort() {
                             "--exact",
                             concat!(
                                 module_path!(),
-                                "::configured_default_sort_initializes_browser_and_retains_runtime_sort"
+                                "::configured_default_sort_initializes_browser_and_remembers_sort_per_folder"
                             )
                             .trim_start_matches("elio::"),
                         ])
@@ -243,7 +243,10 @@ fn configured_default_sort_initializes_browser_and_retains_runtime_sort() {
                 _ => {}
             }
             wait_for_directory_load(&mut app);
-            assert_eq!(app.file_browser.sort_mode, mode);
+            // Entering a folder that was never sorted uses the default.
+            // Returning restores the sort saved for the previous folder.
+            let expected_mode = if step == 2 { initial } else { mode };
+            assert_eq!(app.file_browser.sort_mode, expected_mode);
             let names = app
                 .file_browser
                 .entries
@@ -251,7 +254,7 @@ fn configured_default_sort_initializes_browser_and_retains_runtime_sort() {
                 .filter(|entry| entry.name != "z-folder")
                 .map(|entry| entry.name.as_str())
                 .collect::<Vec<_>>();
-            let expected = match mode {
+            let expected = match expected_mode {
                 SortMode::Name => ["a", "b", "c"],
                 SortMode::Modified => ["b", "c", "a"],
                 SortMode::Size => ["c", "a", "b"],

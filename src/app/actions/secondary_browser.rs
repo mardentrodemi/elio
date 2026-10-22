@@ -79,6 +79,30 @@ impl App {
         self.status = "Preview restored".to_string();
     }
 
+    /// Keep the unfocused pane in the same order when it shows this folder.
+    ///
+    /// The saved sort is already in memory. Reordering that pane does not read
+    /// `folder_sort.toml` or scan the directory again.
+    pub(crate) fn sync_parked_sort_for_same_folder(&mut self) {
+        let same_folder = self
+            .parked_primary
+            .as_ref()
+            .is_some_and(|browser| browser.cwd == self.file_browser.cwd);
+        if !same_folder {
+            return;
+        }
+        let mode = self.file_browser.sort_mode;
+        let folders_first = crate::config::ui().folders_first;
+        let sizes = (mode == crate::filesystem::SortMode::Size)
+            .then(|| self.file_browser.folder_sizes.current.clone());
+        let cols = self.input.screen_regions.metrics.cols.max(1);
+        let rows_visible = self.input.screen_regions.metrics.rows_visible.max(1);
+        let Some(browser) = self.parked_primary.as_mut() else {
+            return;
+        };
+        browser.apply_sort(mode, folders_first, sizes.as_ref(), cols, rows_visible);
+    }
+
     pub(crate) fn focus_other_file_pane(&mut self) {
         if !self.secondary_browser_open() {
             return;

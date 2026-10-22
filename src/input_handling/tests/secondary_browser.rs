@@ -382,3 +382,50 @@ fn secondary_browser_stays_closed_when_preview_is_hidden() {
 
     cleanup_app_temp_root(app, root);
 }
+
+#[test]
+fn same_folder_panes_follow_one_sort() {
+    let root = temp_path("secondary-browser-sort");
+    let epoch = std::time::UNIX_EPOCH + Duration::from_secs(1_700_000_000);
+    for (name, contents, seconds) in [("a.txt", "a", 0u64), ("b.txt", "bbb", 120)] {
+        let path = root.join(name);
+        fs::write(&path, contents).expect("write file");
+        fs::File::options()
+            .write(true)
+            .open(&path)
+            .expect("open file")
+            .set_modified(epoch + Duration::from_secs(seconds))
+            .expect("set modified");
+    }
+    let mut app = App::new_at(root.clone()).expect("app");
+    press_secondary(&mut app);
+    let start = entry_names(&app.file_browser);
+
+    let mut saw_difference = false;
+    for _ in 0..3 {
+        app.handle_event(Event::Key(KeyEvent::new(
+            KeyCode::Char('s'),
+            KeyModifiers::NONE,
+        )))
+        .expect("sort");
+        wait_for_directory_load(&mut app);
+        let focused = entry_names(&app.file_browser);
+        let parked = entry_names(app.parked_primary.as_ref().expect("parked pane"));
+        assert_eq!(focused, parked);
+        saw_difference |= focused != start;
+    }
+    assert!(
+        saw_difference,
+        "cycling sort should change the order in both panes"
+    );
+
+    cleanup_app_temp_root(app, root);
+}
+
+fn entry_names(browser: &crate::file_browser::FileBrowserState) -> Vec<String> {
+    browser
+        .entries
+        .iter()
+        .map(|entry| entry.name.clone())
+        .collect()
+}

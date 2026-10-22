@@ -16,6 +16,7 @@ Navigation, file operations, previews, themes, and the rest of Elio behave as in
 | Move focus between the two file panes | `Shift+\` |
 | Swap the two file panes | `Ctrl+\` |
 | Pin or unpin the current folder in Places | `Shift+B` |
+| Cycle sort and remember it for this folder | `s` |
 
 `\` opens the second pane and moves focus to it. Press `\` again to close the pane and restore the preview.
 
@@ -24,6 +25,8 @@ Navigation, file operations, previews, themes, and the rest of Elio behave as in
 `Ctrl+\` swaps the panes: the left directory moves to the right, the right directory moves to the left, and focus stays on the same directory.
 
 `Shift+B` pins the active pane's folder at the end of Places, before Devices. Press `Shift+B` again in that folder to remove the pin. Pins are saved in `place_tabs.toml` next to the Elio config and stay there until you unpin them, including after elio quits. A folder that is already in Places is not added a second time.
+
+`s` cycles the sort in the folder you are viewing: name, then modified, then size. The fork remembers that choice for the folder. The next time you open it, including after elio quits, it uses the saved sort instead of `[ui] default_sort`. The choice is stored in `folder_sort.toml` next to the Elio config, and only while it differs from the default. Press `s` until the folder is back on the default sort, and that saved choice is removed. Changing `default_sort` later leaves folders you already set as they are. When both panes show the same folder, they follow the same sort.
 
 ### Changing the keys
 

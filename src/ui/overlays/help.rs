@@ -76,7 +76,7 @@ pub(in crate::ui) fn render_help_overlay(
         keys.action(&kb.toggle_view, "toggle grid / list"),
         e("Ctrl++ / Ctrl+-", "grid zoom in / out"),
         keys.action(&kb.toggle_hidden, "toggle dotfiles"),
-        keys.action(&kb.sort, "cycle sort"),
+        keys.action(&kb.sort, "sort this folder"),
         keys.action(&kb.quit, quit_action),
         keys.action(&kb.quit_without_cd, quit_without_cd_action),
     ]);

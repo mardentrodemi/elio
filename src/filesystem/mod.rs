@@ -9,7 +9,7 @@ mod trash_restoration;
 
 pub(crate) use directory_scanning::{
     DirectoryFingerprint, DirectorySnapshot, entry_from_path, load_directory_snapshot,
-    load_directory_snapshot_cancellable, scan_directory_fingerprint_cancellable,
+    load_directory_snapshot_cancellable, scan_directory_fingerprint_cancellable, sort_entries,
     sort_entries_by_recursive_size,
 };
 pub(crate) use directory_statistics::{

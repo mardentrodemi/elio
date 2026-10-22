@@ -78,6 +78,8 @@ impl App {
 
     pub(crate) fn cycle_sort_mode(&mut self) -> Result<()> {
         let sort_mode = self.file_browser.cycle_sort_mode();
+        self.folder_sorts.record(&self.file_browser.cwd, sort_mode);
+        self.sync_parked_sort_for_same_folder();
         self.reload()?;
         self.status = format!("Sort: {}", sort_mode.label());
         Ok(())

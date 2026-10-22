@@ -17,6 +17,7 @@ mod file_browser;
 mod file_classification;
 mod file_operations;
 mod filesystem;
+mod folder_sort;
 mod fuzzy_finder;
 mod goto_menu;
 mod input_handling;

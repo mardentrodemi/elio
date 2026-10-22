@@ -293,7 +293,7 @@ pub(crate) fn scan_directory_fingerprint_cancellable(
     Ok(fingerprint_from_parts(&mut parts))
 }
 
-fn sort_entries(entries: &mut [Entry], mode: SortMode, folders_first: bool) {
+pub(crate) fn sort_entries(entries: &mut [Entry], mode: SortMode, folders_first: bool) {
     entries.sort_by(|left, right| match (left.is_dir(), right.is_dir()) {
         (true, false) if folders_first => Ordering::Less,
         (false, true) if folders_first => Ordering::Greater,

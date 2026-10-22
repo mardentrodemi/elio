@@ -96,6 +96,37 @@ impl super::FileBrowserState {
         changed
     }
 
+    /// Reorder the loaded listing. Entries are already in memory, so this does not
+    /// read the folder or the saved-sort file.
+    pub(crate) fn apply_sort(
+        &mut self,
+        mode: crate::filesystem::SortMode,
+        folders_first: bool,
+        folder_sizes: Option<&std::collections::HashMap<std::path::PathBuf, u64>>,
+        cols: usize,
+        rows_visible: usize,
+    ) {
+        self.sort_mode = mode;
+        let selected_path = self.selected_entry().map(|entry| entry.path.clone());
+        if mode == crate::filesystem::SortMode::Size
+            && let Some(sizes) = folder_sizes
+        {
+            crate::filesystem::sort_entries_by_recursive_size(
+                &mut self.unfiltered_entries,
+                folders_first,
+                sizes,
+            );
+        } else {
+            crate::filesystem::sort_entries(&mut self.unfiltered_entries, mode, folders_first);
+        }
+        self.apply_local_filter();
+        self.selected = selected_path
+            .and_then(|path| self.entries.iter().position(|entry| entry.path == path))
+            .unwrap_or(0);
+        self.clamp_selection();
+        self.sync_scroll(cols, rows_visible);
+    }
+
     pub(crate) fn clamp_selection(&mut self) -> bool {
         if self.entries.is_empty() {
             self.selected = 0;

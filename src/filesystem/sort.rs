@@ -4,7 +4,7 @@ use icu_locale_core::Locale;
 use icu_normalizer::{ComposingNormalizer, ComposingNormalizerBorrowed};
 use std::{cmp::Ordering, sync::OnceLock};
 
-#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq, serde::Deserialize)]
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq, serde::Deserialize, serde::Serialize)]
 #[serde(rename_all = "lowercase")]
 pub enum SortMode {
     Name,

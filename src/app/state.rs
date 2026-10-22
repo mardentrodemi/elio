@@ -15,6 +15,7 @@ use crate::file_browser::FileBrowserState;
 use crate::file_operations::BulkRenameEditorSession;
 use crate::file_operations::FileOperationsState;
 use crate::filesystem::Entry;
+use crate::folder_sort::FolderSortMemory;
 use crate::fuzzy_finder::FuzzyFinderState;
 use crate::goto_menu::GotoMenu;
 use crate::opening::open_with::ApplicationSelection;
@@ -175,6 +176,8 @@ pub(crate) enum PendingTerminalTask {
 
 pub struct App {
     pub(crate) file_browser: FileBrowserState,
+    /// Sort choices saved per folder. Both panes read this list.
+    pub(crate) folder_sorts: FolderSortMemory,
     pub(crate) places: PlacesState,
     pub(crate) preview: PreviewRuntime,
     pub(crate) file_operations: FileOperationsState,
@@ -227,6 +230,7 @@ impl App {
                 crate::config::ui().grid_zoom,
                 crate::config::ui().show_hidden || reveal_hidden_start_focus,
             ),
+            folder_sorts: FolderSortMemory::load(),
             places: PlacesState::new(),
             preview: PreviewRuntime::new(),
             file_operations: FileOperationsState::default(),
@@ -266,7 +270,7 @@ impl App {
             secondary_focus_right: false,
             remembered_secondary: None,
         };
-        app.file_browser.sort_mode = crate::config::ui().default_sort;
+        app.file_browser.sort_mode = app.folder_sorts.sort_for(&app.file_browser.cwd);
         app.file_browser.in_trash = crate::places::path_is_trash(&app.file_browser.cwd);
         let snapshot = crate::filesystem::load_directory_snapshot(
             &app.file_browser.cwd,

@@ -62,6 +62,7 @@ impl App {
             self.sync_scroll();
             self.remember_current_directory_view();
             self.file_browser.directory_count_viewport = None;
+            self.sync_parked_sort_for_same_folder();
         }
         changed
     }
